@@ -1,0 +1,13 @@
+node_modules/
+build/
+*.log
+
+# Local tooling state
+.ai/
+.claude/settings.local.json
+
+# A harness inside this repo: the markdown spec is committable, the rest is not.
+harness/harness.json
+harness/.harness.json.*.tmp
+harness/.cache/
+harness/config.json

@@ -1,0 +1,53 @@
+{
+  "name": "harness-mcp",
+  "version": "0.1.0",
+  "description": "Harness MCP — the project harness (constitution, structure, design, spec) as the single source of truth for coding agents",
+  "type": "module",
+  "main": "build/index.js",
+  "bin": {
+    "harness-mcp": "build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "start": "node build/index.js",
+    "dev": "tsc && node build/index.js",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "harness",
+    "spec",
+    "specification",
+    "ai-agent",
+    "peregrine",
+    "projectmind"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "build",
+    "README.md",
+    "LICENSE"
+  ],
+  "author": "Mykola Riabokon",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mykolariabokon/harness-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mykolariabokon/harness-mcp/issues"
+  },
+  "homepage": "https://github.com/mykolariabokon/harness-mcp#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}
