@@ -30,6 +30,11 @@ export function renderHarnessHtml(db: HarnessDb, opts: RenderOptions): string {
   const tokens = db.getDesignTokens();
 
   const focus = opts.focus ?? (pending.length ? 'review' : 'structure');
+  // Активна панель позначається ТУТ, а не інлайн-скриптом. Інакше сторінка
+  // порожня скрізь, де скрипт заблоковано: хост із суворим CSP, браузер із
+  // вимкненим JS, збережений HTML. Реальний випадок — панель у Peregrine:
+  // шапка й лічильники видно, тіло порожнє.
+  const on = (id: string) => (id === focus ? ' on' : '');
 
   return `<!doctype html>
 <html lang="en">
@@ -46,19 +51,19 @@ export function renderHarnessHtml(db: HarnessDb, opts: RenderOptions): string {
     <p class="sub">${esc(opts.projectName)} · source of truth</p>
   </div>
   <nav class="tabs">
-    ${tab('structure', 'Structure', structure.length)}
-    ${tab('mockup', 'Mockup', design.length)}
-    ${tab('spec', 'Spec', requirements.length + steps.length)}
-    ${tab('review', 'Review', pending.length, pending.length > 0)}
+    ${tab('structure', 'Structure', structure.length, false, focus === 'structure')}
+    ${tab('mockup', 'Mockup', design.length, false, focus === 'mockup')}
+    ${tab('spec', 'Spec', requirements.length + steps.length, false, focus === 'spec')}
+    ${tab('review', 'Review', pending.length, pending.length > 0, focus === 'review')}
   </nav>
 </header>
 
 <main>
-  <section id="panel-structure" class="panel">
+  <section id="panel-structure" class="panel${on('structure')}">
     ${structure.length ? structureTree(structure) : empty('No structure yet. Run harness_init (new project) or harness_reverse (existing code).')}
   </section>
 
-  <section id="panel-mockup" class="panel${tokens ? ' themed' : ''}">
+  <section id="panel-mockup" class="panel${on('mockup')}${tokens ? ' themed' : ''}">
     ${themeNote(tokens)}
     ${rules.length ? `<div class="rules"><h3>Global design rules</h3><ul>${rules
       .map((r) => `<li>${esc(r.rule)}${r.scope !== 'global' ? ` <span class="scope">${esc(r.scope)}</span>` : ''}</li>`)
@@ -66,12 +71,12 @@ export function renderHarnessHtml(db: HarnessDb, opts: RenderOptions): string {
     ${screens(structure, design)}
   </section>
 
-  <section id="panel-spec" class="panel">
+  <section id="panel-spec" class="panel${on('spec')}">
     ${specList('Requirements', requirements)}
     ${specList('Steps', steps)}
   </section>
 
-  <section id="panel-review" class="panel">
+  <section id="panel-review" class="panel${on('review')}">
     ${pending.length ? pending.map(reviewCard).join('') : empty('Nothing waiting for approval.')}
   </section>
 </main>
@@ -85,9 +90,9 @@ export function renderHarnessHtml(db: HarnessDb, opts: RenderOptions): string {
 </html>`;
 }
 
-function tab(id: string, label: string, count: number, alert = false): string {
+function tab(id: string, label: string, count: number, alert = false, active = false): string {
   const badge = count ? `<span class="badge${alert ? ' alert' : ''}">${count}</span>` : '';
-  return `<button class="tab" data-tab="${id}">${esc(label)}${badge}</button>`;
+  return `<button class="tab${active ? ' on' : ''}" data-tab="${id}">${esc(label)}${badge}</button>`;
 }
 
 function structureTree(nodes: HarnessEntry[]): string {
