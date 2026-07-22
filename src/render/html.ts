@@ -200,10 +200,12 @@ const CSS = `
   --del: #b3261e; --delbg: #fdecea; --skel: #e3e5ea;
 }
 @media (prefers-color-scheme: dark) {
+  /* Тепла темна палітра — та сама, що в редакторі Peregrine: панель має
+     виглядати його частиною, а не чужою сторінкою. Акцент clay #d97757. */
   :root {
-    --bg: #16181d; --fg: #e6e8ec; --muted: #9aa1ac; --line: #2b2f36;
-    --card: #1d2026; --accent: #6bbf8f; --add: #6bbf8f; --addbg: #17301f;
-    --del: #ef8a83; --delbg: #33191a; --skel: #2b2f36;
+    --bg: #1b1a17; --fg: #e8e6e1; --muted: #8f8c85; --line: #34322d;
+    --card: #232120; --accent: #d97757; --add: #7fb08a; --addbg: #1e2a22;
+    --del: #e08b83; --delbg: #2e1f1e; --skel: #2b2926;
   }
 }
 * { box-sizing: border-box; }
