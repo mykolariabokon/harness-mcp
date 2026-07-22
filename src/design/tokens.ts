@@ -61,6 +61,11 @@ export function normalizeDesignMcpTokens(payload: unknown, source = 'design-mcp'
   const fonts: Dict = t.fonts ?? {};
   const sizes: Dict = t.font_sizes ?? {};
   const shadows: Dict = t.shadows ?? {};
+  // Real design systems keep "the colour of text on a brand surface" in semantic
+  // tokens, not in the palette — Design MCP has no colors.white, but does have
+  // text.inverse. Read it before falling back.
+  const semantic: Dict = t.semantic_tokens?.colors ?? {};
+  const inverse = semantic['text.inverse']?.default ?? colors.white;
 
   return {
     source,
@@ -72,7 +77,7 @@ export function normalizeDesignMcpTokens(payload: unknown, source = 'design-mcp'
       muted: pick(neutral['500'], FALLBACK.colors.muted),
       border: pick(neutral['200'], FALLBACK.colors.border),
       accent: pick(brand['500'], FALLBACK.colors.accent),
-      accent_text: pick(colors.white, FALLBACK.colors.accent_text),
+      accent_text: pick(inverse, FALLBACK.colors.accent_text),
     },
     radii: {
       control: pick(radii.sm, FALLBACK.radii.control),

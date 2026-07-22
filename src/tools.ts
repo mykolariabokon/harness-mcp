@@ -9,6 +9,7 @@ import {
   reverseInstructions,
   type HarnessDraft,
 } from './assembly.js';
+import { checkDraft, MAX_ATTEMPTS, reworkInstructions, type QualityReport } from './assembly/quality.js';
 import { scanCode } from './codeScan.js';
 import { coerceTokens, rulesFromDesignMcp, type ImportedRule } from './design/tokens.js';
 import { fetchDesignSystem } from './design/DesignMcpClient.js';
@@ -422,13 +423,10 @@ async function init(args: Args) {
     };
   }
   const name = args.project_name ?? projectName(args.project_path);
-  const outcome = await svc.bridge(HOST).generate({
-    purpose: 'init',
-    instructions: initInstructions(String(args.description), name),
-    schema: HARNESS_DRAFT_SCHEMA,
-    context: { project_name: name, project_path: svc.paths.projectRoot },
+  return runAssembly(svc, 'init', initInstructions(String(args.description), name), {
+    project_name: name,
+    project_path: svc.paths.projectRoot,
   });
-  return finishAssembly(svc, outcome, 'init');
 }
 
 async function reverse(args: Args) {
@@ -442,44 +440,134 @@ async function reverse(args: Args) {
   }
   const name = projectName(args.project_path);
   const inventory = args.analysis ?? scanCode(svc.paths.projectRoot);
-  const outcome = await svc.bridge(HOST).generate({
-    purpose: 'reverse',
-    instructions: reverseInstructions(name, args.hint ?? null),
-    schema: HARNESS_DRAFT_SCHEMA,
-    context: { project_name: name, inventory },
+  return runAssembly(svc, 'reverse', reverseInstructions(name, args.hint ?? null), {
+    project_name: name,
+    inventory,
   });
-  return finishAssembly(svc, outcome, 'reverse');
 }
 
-/** Both assembly paths converge here — native returns a request, universal returns data. */
-function finishAssembly(svc: HarnessService, outcome: GenerationOutcome, purpose: string) {
+/**
+ * Both assembly paths converge here — native hands the work to the editor's agent,
+ * universal calls the configured model — and both results go through the same
+ * quality gate before anything is written.
+ */
+async function runAssembly(
+  svc: HarnessService,
+  purpose: string,
+  originalInstructions: string,
+  baseContext: Record<string, unknown>,
+  instructions: string = originalInstructions,
+  attempt = 1,
+): Promise<unknown> {
+  const context = { ...baseContext, attempt, original_instructions: originalInstructions };
+  const outcome: GenerationOutcome = await svc
+    .bridge(HOST)
+    .generate({ purpose, instructions, schema: HARNESS_DRAFT_SCHEMA, context });
+
   if (outcome.status === 'needs_agent') {
     return {
       status: 'needs_agent',
       purpose,
+      attempt,
       request_id: outcome.request_id,
       instructions: outcome.instructions,
       schema: outcome.schema,
       context: outcome.context,
       next: 'Produce the JSON with your own model, then call harness_submit_generation with this request_id.',
+      note: 'The result is checked before it is written: a flat structure, an orphan parent, or an assumption without a question comes back for rework.',
     };
   }
   if (outcome.status === 'not_configured') return { status: 'not_configured', reason: outcome.reason };
-  return applyAssembly(svc, outcome.data as HarnessDraft, purpose);
+  return gradeAndApply(svc, outcome.data as HarnessDraft, purpose, originalInstructions, baseContext, attempt, true);
 }
 
-function applyAssembly(svc: HarnessService, draft: HarnessDraft, purpose: string) {
+/**
+ * Grade the draft, then either write it, send it back, or — once the attempts are
+ * spent — write it anyway with its problems recorded. Never silently, never fixed
+ * by guesswork.
+ */
+async function gradeAndApply(
+  svc: HarnessService,
+  draft: HarnessDraft,
+  purpose: string,
+  originalInstructions: string,
+  baseContext: Record<string, unknown>,
+  attempt: number,
+  canRetryInline: boolean,
+): Promise<unknown> {
+  const report = checkDraft(draft);
+  if (report.ok || attempt >= MAX_ATTEMPTS) return applyAssembly(svc, draft, purpose, report, attempt);
+
+  const next = attempt + 1;
+  const nextInstructions = reworkInstructions(originalInstructions, report, next);
+
+  // Universal mode owns the model, so it just asks again.
+  if (canRetryInline) {
+    return runAssembly(svc, purpose, originalInstructions, baseContext, nextInstructions, next);
+  }
+
+  // Native mode: the editor's agent does the rework and resubmits.
+  const req = svc.db.openGeneration(purpose, nextInstructions, HARNESS_DRAFT_SCHEMA, {
+    ...baseContext,
+    attempt: next,
+    original_instructions: originalInstructions,
+  });
+  return {
+    status: 'rework_needed',
+    purpose,
+    attempt: next,
+    rejected_because: report.errors,
+    warnings: report.warnings,
+    request_id: req.id,
+    instructions: nextInstructions,
+    schema: HARNESS_DRAFT_SCHEMA,
+    next: `Nothing was written. Fix the problems above and call harness_submit_generation with request_id ${req.id}. This is the last attempt before the draft is accepted as it stands.`,
+  };
+}
+
+function applyAssembly(
+  svc: HarnessService,
+  draft: HarnessDraft,
+  purpose: string,
+  report: QualityReport = { errors: [], warnings: [], ok: true },
+  attempt = 1,
+) {
   const applied = applyDraft(svc.db, draft);
+
+  // Out of attempts but still not right: the harness gets written, and the fact
+  // that it was written under protest becomes part of it — visible in
+  // CONSTITUTION.md, so nobody approves it later believing it was clean.
+  if (!report.ok) {
+    svc.db.upsertEntry({
+      type: 'decision',
+      key: 'assembly-quality',
+      title: 'Harness accepted with unresolved assembly problems',
+      body: [
+        `The ${purpose} assembly was accepted after ${attempt} attempts without these being fixed:`,
+        ...report.errors.map((e) => `- ${e}`),
+        '',
+        'Fix them through harness_chat — the structure below is not trustworthy until you do.',
+      ].join('\n'),
+      confidence: 'assumption',
+      question: 'The generated structure did not meet the quality bar. Rebuild it, or correct it by hand?',
+    });
+  }
+
   svc.db.createCheckpoint(`${purpose} assembly`);
   const files = svc.syncSpecFiles();
   return {
-    status: 'assembled',
+    status: report.ok ? 'assembled' : 'assembled_with_problems',
     purpose,
+    attempts: attempt,
     harness_dir: svc.paths.dir,
     ...applied,
+    problems: report.errors,
+    warnings: report.warnings,
     spec_files: files,
     open_questions: svc.status().open_questions,
-    next: 'Show it to the human with harness_render, then refine through harness_chat — every change goes through approval.',
+    next: report.ok
+      ? 'Show it to the human with harness_render, then refine through harness_chat — every change goes through approval.'
+      : 'Show it to the human with harness_render and say plainly that the structure did not pass its own quality check.',
   };
 }
 
@@ -491,7 +579,16 @@ async function submitGeneration(args: Args) {
   svc.db.closeGeneration(req.id, args.result);
 
   if (req.purpose === 'init' || req.purpose === 'reverse') {
-    return applyAssembly(svc, args.result as HarnessDraft, req.purpose);
+    const ctx = (req.context ?? {}) as Record<string, unknown>;
+    return gradeAndApply(
+      svc,
+      args.result as HarnessDraft,
+      req.purpose,
+      String(ctx.original_instructions ?? req.instructions),
+      ctx,
+      Number(ctx.attempt ?? 1),
+      false,
+    );
   }
   return queueChanges(svc, args.result as ChangeSet, req.purpose);
 }

@@ -72,18 +72,25 @@ export function renderHarnessHtml(db: HarnessDb, opts: RenderOptions): string {
   </section>
 
   <section id="panel-spec" class="panel${on('spec')}">
-    ${specList('Requirements', requirements)}
-    ${specList('Steps', steps)}
+    ${requirements.length || steps.length
+      ? `${specList('Requirements', requirements)}${specList('Steps', steps)}`
+      : empty(
+          'No requirements or steps yet — they normally arrive with the initial assembly. Ask for them in the chat, ' +
+            'for example: “add a requirement that an order can only be cancelled before it fills”.',
+        )}
   </section>
 
   <section id="panel-review" class="panel${on('review')}">
-    ${pending.length ? pending.map(reviewCard).join('') : empty('Nothing waiting for approval.')}
+    ${pending.length
+      ? pending.map(reviewCard).join('')
+      : empty(
+          'Nothing waiting for approval. Everything an agent proposes lands here first — old struck through, ' +
+            'new highlighted — and enters the harness only when you accept it.',
+        )}
   </section>
 </main>
 
-<footer class="foot">
-  <span>Criticise in words — the chat is the only way in. This view is read-only by design.</span>
-</footer>
+<footer class="foot">${critiqueHint()}</footer>
 
 <script>${JS}</script>
 </body>
@@ -120,6 +127,23 @@ function structureTree(nodes: HarnessEntry[]): string {
       .join('')}</ul>`;
   };
   return walk(null) || empty('No structure yet.');
+}
+
+/**
+ * "Criticise in words" told the human the rule but not the move. This is for the
+ * person reading the panel, so it belongs on the page — with real sentences they
+ * can copy, not an abstract instruction.
+ */
+function critiqueHint(): string {
+  const examples = [
+    'sidebar on the left',
+    'drop the settings screen',
+    'Order belongs to engine, not shared',
+    'all buttons get an 8px radius',
+  ];
+  return `<span class="foot-main">This view is read-only by design. To change anything, say it in the chat in plain words —
+    the agent turns it into a harness change and you approve the diff.</span>
+    <span class="foot-eg">${examples.map((e) => `<code>${esc(e)}</code>`).join(' ')}</span>`;
 }
 
 function themeNote(tokens: DesignTokens | null): string {
@@ -222,7 +246,7 @@ h1 { margin: 0; font-size: 18px; letter-spacing: .2px; }
 .badge { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 8px;
          background: var(--skel); font-size: 11px; }
 .badge.alert { background: var(--accent); color: var(--bg); }
-main { padding: 20px 22px 60px; max-width: 980px; }
+main { padding: 20px 22px 96px; max-width: 980px; } /* clears the fixed footer, which wraps to two lines when narrow */
 .panel { display: none; }
 .panel.on { display: block; }
 .empty { color: var(--muted); }
@@ -263,7 +287,11 @@ pre.diff { margin: 10px 12px; padding: 10px; background: var(--card); border-rad
 .hint { margin: 0 12px 12px; font-size: 12px; color: var(--muted); }
 .theme-note { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
 .foot { position: fixed; bottom: 0; left: 0; right: 0; padding: 8px 22px;
-        border-top: 1px solid var(--line); background: var(--bg); color: var(--muted); font-size: 12px; }
+        border-top: 1px solid var(--line); background: var(--bg); color: var(--muted); font-size: 12px;
+        display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.foot-main { flex: 1 1 320px; min-width: 0; }
+.foot-eg { display: flex; gap: 6px; flex-wrap: wrap; }
+.foot-eg code { white-space: nowrap; }
 `;
 
 /**

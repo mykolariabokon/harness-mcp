@@ -195,6 +195,51 @@ describe('design system', () => {
     expect(after.design_rules.some((r: any) => r.rule.includes('hardcode hex'))).toBe(true);
   });
 
+  it('reads the real Design MCP payload shape, not just a tidy fixture', async () => {
+    // Verified against a live Design MCP server: the palette is nested by scale,
+    // the radii carry an extra chakraKeys block, and the colour of text on a brand
+    // surface lives in semantic_tokens rather than in the palette.
+    const real = {
+      chakraVersion: 'v2.8.2',
+      tokens: {
+        colors: {
+          brand: { '500': '#b1403c', '700': '#7d2522' },
+          neutral: { '0': '#ffffff', '50': '#f8fafc', '200': '#e2e8f0', '500': '#64748b', '800': '#1f2937' },
+          green: { '500': '#10B981' },
+        },
+        semantic_tokens: {
+          colors: {
+            'text.primary': { default: 'neutral.800', _dark: 'rgba(255,255,255,0.92)' },
+            'text.inverse': { default: 'white' },
+            'surface.glass': { default: 'rgba(255,255,255,0.72)' },
+          },
+        },
+        gradients: { brand: 'linear-gradient(135deg, #b1403c, #7d2522)' },
+        radii: { sm: '22px', md: '24px', lg: '26px', pill: '9999px', chakraKeys: { cardMd: '24px' } },
+        shadows: { cardSm: '0 10px 24px rgba(15, 23, 42, 0.04)', cardMd: '0 12px 30px rgba(15, 23, 42, 0.05)' },
+        blurs: { md: 'blur(16px)' },
+        motion: { duration: { base: 0.42 } },
+        fonts: { heading: "'Sora', 'Manrope', 'Segoe UI', sans-serif", body: "'Manrope', 'Inter', sans-serif", mono: "'JetBrains Mono', monospace" },
+        font_sizes: { xs: '12px', sm: '14px', lg: '18px', '6xl': '60px' },
+        spacing: { '1': '4px', '2': '8px', '4': '16px', usageMapping: { 'Card inner padding': '5 / 6 / 7' } },
+        layer_styles: { glassCard: { bg: 'rgba(255,255,255,0.72)' } },
+        text_styles: { cardTitle: { fontSize: 'lg' } },
+      },
+    };
+
+    const res = (await callTool('harness_set_design_tokens', { project_path: project, tokens: real })) as any;
+    const t = res.tokens;
+    expect(t.colors.accent).toBe('#b1403c');
+    expect(t.colors.text).toBe('#1f2937');
+    expect(t.radii.control).toBe('22px');
+    expect(t.radii.card).toBe('24px');
+    expect(t.radii.pill).toBe('9999px');
+    expect(t.fonts.heading).toContain('Sora');
+    expect(t.shadows.card).toBe('0 12px 30px rgba(15, 23, 42, 0.05)');
+    // Not the '#ffffff' fallback by luck — taken from semantic_tokens.
+    expect(t.colors.accent_text).toBe('white');
+  });
+
   it('does not queue the same imported rule twice', async () => {
     const again = (await callTool('harness_set_design_tokens', {
       project_path: project, tokens: designMcpTokens, rules: designMcpRules,

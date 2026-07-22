@@ -27,15 +27,24 @@ export const HARNESS_DRAFT_SCHEMA = {
     },
     structure: {
       type: 'array',
-      description: 'Modules, entities, screens and flows. `parent` refers to another node key.',
+      description:
+        'A TREE of modules, entities, screens and flows — not a flat list. Every node except a top-level ' +
+        'application or package must name its `parent`. A flat array where every node has parent=null is ' +
+        'a rejected answer, not a simpler one.',
       items: {
         type: 'object',
-        required: ['key', 'title', 'kind'],
+        required: ['key', 'title', 'kind', 'parent'],
         properties: {
           key: { type: 'string' },
           title: { type: 'string' },
           kind: { enum: ['module', 'entity', 'screen', 'flow', 'component'] },
-          parent: { type: ['string', 'null'] },
+          parent: {
+            type: ['string', 'null'],
+            description:
+              'Key of the node this one lives inside. `null` ONLY for roots — the applications or packages ' +
+              'of the repository. An entity belongs to its module, a screen to its application, a component ' +
+              'to its screen.',
+          },
           path: { type: ['string', 'null'], description: 'Repo path this node lives at, if any.' },
           description: { type: 'string' },
           layout: { $ref: '#/$defs/layout' },
@@ -239,6 +248,21 @@ export function applyDraft(db: HarnessDb, draft: HarnessDraft): ApplyDraftResult
   return { entries, rules, assumptions };
 }
 
+/**
+ * The single rule that decides whether the structure is usable. It is repeated in
+ * both assembly prompts on purpose: a flat list passes every other check, renders
+ * as a wall of sibling nodes, and is indistinguishable from a correct answer
+ * unless it is asked for and verified explicitly.
+ */
+const TREE_RULE = [
+  '- STRUCTURE IS A TREE, NOT A LIST. Every node except a root MUST carry `parent` —',
+  '  the key of the node it lives inside. Roots (`parent: null`) are the applications',
+  '  and packages of the repository, and there are only a few of them.',
+  '  Group entities under the module they belong to, screens under their application,',
+  '  components under their screen. Twenty-five nodes side by side at one level means',
+  '  the work was not done — that answer is rejected and sent back.',
+].join('\n');
+
 /** Instructions for forward assembly (new project, from the user's description). */
 export function initInstructions(description: string, projectName: string): string {
   return [
@@ -251,10 +275,13 @@ export function initInstructions(description: string, projectName: string): stri
     'Rules:',
     '- CONSTITUTION: stack, hard invariants, and the exact commands that verify the project.',
     '- STRUCTURE: real modules/entities/screens/flows with the repo path each will live at.',
+    TREE_RULE,
+    '- Every node of kind "screen" MUST carry a `layout` skeleton, otherwise its mockup',
+    '  renders empty and the human has nothing to judge.',
     '- REQUIREMENTS: EARS notation, each with the *why* from the description.',
     '- STEPS: phased, each ending in an executable `verify` command.',
     '- Mark anything the description does not settle as confidence "assumption" and attach',
-    '  the question you would ask the human. Never invent certainty.',
+    '  the `question` you would ask the human. An assumption without a question is rejected.',
     '',
     'Project description from the user:',
     description,
@@ -275,6 +302,11 @@ export function reverseInstructions(projectName: string, hint: string | null): s
     '- Anything inferred (intent, why a boundary is where it is, product requirements) is',
     '  confidence "assumption" and MUST carry a question for the human — code cannot contain intent.',
     '- STRUCTURE nodes must use real repo paths taken from the inventory.',
+    TREE_RULE,
+    '  The repository layout already tells you the tree: a node at `apps/engine/api` is a',
+    '  child of the node at `apps/engine`, which is a child of nothing.',
+    '- Every node of kind "screen" MUST carry a `layout` skeleton, otherwise its mockup',
+    '  renders empty and the human has nothing to judge.',
     '- STEPS should describe what remains, not what already exists.',
     hint ? `\nExtra context from the caller:\n${hint}` : '',
   ].join('\n');

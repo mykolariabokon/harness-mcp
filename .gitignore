@@ -11,3 +11,4 @@ harness/harness.json
 harness/.harness.json.*.tmp
 harness/.cache/
 harness/config.json
+__pycache__/
