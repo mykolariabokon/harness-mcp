@@ -86,7 +86,7 @@ ${tabRadio('review', focus)}
       ? `${specList('Requirements', requirements)}${specList('Steps', steps)}`
       : empty(
           'No requirements or steps yet — they normally arrive with the initial assembly. Ask for them in the chat, ' +
-            'for example: “add a requirement that an order can only be cancelled before it fills”.',
+            'for example: “add a requirement that a record can only be deleted by its owner”.',
         )}
   </section>
 
@@ -326,10 +326,12 @@ const chips = (n: number) => Array.from({ length: n }, () => '<i class="chip"></
  * can copy, not an abstract instruction.
  */
 function critiqueHint(): string {
+  // Domain-neutral on purpose: this panel renders for every project, so the
+  // examples must not presume what the project is about.
   const examples = [
     'sidebar on the left',
     'drop the settings screen',
-    'Order belongs to engine, not shared',
+    'group these entities under one module',
     'all buttons get an 8px radius',
   ];
   return `<span class="foot-main">This view is read-only by design. To change anything, say it in the chat in plain words —

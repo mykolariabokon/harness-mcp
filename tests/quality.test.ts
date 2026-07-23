@@ -168,7 +168,7 @@ describe('panel guidance', () => {
 
     expect(html.html).toContain('say it in the chat in plain words');
     expect(html.html).toContain('sidebar on the left');
-    expect(html.html).toContain('Order belongs to engine, not shared');
+    expect(html.html).toContain('group these entities under one module');
   });
 
   it('explains what an empty panel is missing', async () => {
