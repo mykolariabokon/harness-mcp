@@ -94,6 +94,25 @@ Then, in your editor's chat:
 
 From then on, ask the agent to call `harness_get_spec` before it writes code.
 
+In an agent editor that is all: the harness borrows the agent's own model —
+**native mode, no API key**. Universal mode, for a client with no agent to lend,
+additionally needs a provider and model:
+
+```
+harness_configure({ project_path, model: { mode: "universal", provider: "openrouter", model: "…" } })
+```
+
+and the key from the **environment**, so it never lands inside the project:
+
+```bash
+export OPENROUTER_API_KEY=…   # or ANTHROPIC_API_KEY, or HARNESS_MODEL_API_KEY
+```
+
+`model.api_key` in `config.json` still works and the environment wins over it, but
+a key in a file is one careless `git add -f` away from being published. The key is
+never echoed back — `harness_configure` reports only `api_key_source`
+(`env` / `config` / `none`).
+
 ## The `/harness` folder
 
 Created at the project root on first use:

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { HarnessService } from './HarnessService.js';
 import { harnessExists } from './paths.js';
-import { NO_HOST, saveConfig, universalModelReady, type HostCapabilities } from './config.js';
+import { apiKeySource, NO_HOST, saveConfig, universalModelReady, type HostCapabilities } from './config.js';
 import {
   applyDraft,
   HARNESS_DRAFT_SCHEMA,
@@ -977,12 +977,14 @@ function configure(args: Args) {
     };
     saveConfig(svc.paths, svc.config);
   }
+  // The key never leaves this process — not in a tool result, not in a log.
   const redacted = { ...svc.config, model: { ...svc.config.model, api_key: svc.config.model.api_key ? '***' : null } };
   return {
     config: redacted,
     resolved_model_mode: svc.modelMode(HOST),
     resolved_render_output: svc.renderOutput(HOST),
     universal_model_ready: universalModelReady(svc.config),
+    api_key_source: apiKeySource(svc.config),
     host: HOST,
   };
 }

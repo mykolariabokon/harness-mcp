@@ -1,6 +1,6 @@
 import type { HarnessConfig } from '../types.js';
 import type { HarnessDb } from '../db/HarnessDb.js';
-import { universalModelReady } from '../config.js';
+import { resolveApiKey, universalModelReady } from '../config.js';
 
 /**
  * The harness needs a model to turn "make the buttons green" into structured
@@ -55,8 +55,10 @@ export class LlmBridge {
       return {
         status: 'not_configured',
         reason:
-          'Universal mode needs a model in /harness/config.json (model.provider = "openrouter" | "anthropic", model.model, model.api_key). ' +
-          'Set it with harness_configure, or connect from an editor that lends the harness its own agent (native mode).',
+          'Universal mode needs a provider and model in /harness/config.json (model.provider = "openrouter" | "anthropic", model.model) ' +
+          'plus an API key. Prefer the environment — OPENROUTER_API_KEY / ANTHROPIC_API_KEY, or HARNESS_MODEL_API_KEY — so the key stays ' +
+          'out of the project; model.api_key in config.json also works. Set the rest with harness_configure, or connect from an editor ' +
+          'that lends the harness its own agent (native mode, no key at all).',
       };
     }
 
@@ -72,7 +74,8 @@ export class LlmBridge {
       `${spec.instructions}\n\nJSON Schema:\n${JSON.stringify(spec.schema, null, 2)}\n\n` +
       `Context:\n${JSON.stringify(spec.context, null, 2)}`;
 
-    const { provider, model, api_key, base_url } = this.cfg.model;
+    const { provider, model, base_url } = this.cfg.model;
+    const api_key = resolveApiKey(this.cfg);
     if (provider === 'anthropic') {
       const res = await fetch(`${base_url ?? 'https://api.anthropic.com'}/v1/messages`, {
         method: 'POST',

@@ -60,6 +60,28 @@ export function resolveRenderOutput(cfg: HarnessConfig, host: HostCapabilities):
   return host.webview ? 'webview' : 'browser';
 }
 
+/**
+ * The API key, preferring the environment over the config file.
+ *
+ * A key written into `/harness/config.json` sits in plaintext inside the project
+ * — gitignored, but still one careless `git add -f` or shared screen away from
+ * being leaked. The environment keeps it out of the repository entirely, so it is
+ * the documented path; `config.json` stays supported for convenience.
+ */
+export function resolveApiKey(cfg: HarnessConfig): string | null {
+  const fromEnv =
+    process.env.HARNESS_MODEL_API_KEY ||
+    (cfg.model.provider === 'anthropic' ? process.env.ANTHROPIC_API_KEY : process.env.OPENROUTER_API_KEY);
+  return (fromEnv || cfg.model.api_key) ?? null;
+}
+
+/** Where the key came from — reported by harness_configure, never the key itself. */
+export function apiKeySource(cfg: HarnessConfig): 'env' | 'config' | 'none' {
+  if (process.env.HARNESS_MODEL_API_KEY) return 'env';
+  if (cfg.model.provider === 'anthropic' ? process.env.ANTHROPIC_API_KEY : process.env.OPENROUTER_API_KEY) return 'env';
+  return cfg.model.api_key ? 'config' : 'none';
+}
+
 export function universalModelReady(cfg: HarnessConfig): boolean {
-  return Boolean(cfg.model.provider && cfg.model.api_key && cfg.model.model);
+  return Boolean(cfg.model.provider && cfg.model.model && resolveApiKey(cfg));
 }

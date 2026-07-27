@@ -5,6 +5,9 @@ build/
 # Local tooling state
 .ai/
 .claude/settings.local.json
+# Machine-specific: holds an absolute path to this checkout. The README shows the
+# snippet; each machine writes its own.
+.mcp.json
 
 # A harness inside this repo: the markdown spec is committable, the rest is not.
 harness/harness.json
