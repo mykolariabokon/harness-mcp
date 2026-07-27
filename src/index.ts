@@ -17,11 +17,19 @@ const server = new Server(
   { name: 'harness-mcp', version: '0.1.0' },
   {
     capabilities: { tools: {} },
+    // These reach EVERY session the server is registered for — including projects
+    // that have no harness at all. So they must start by saying how to tell, and
+    // must not push anyone into assembling one: an unwanted harness in a project
+    // nobody asked to specify is worse than no harness.
     instructions:
-      'The harness is the SOURCE OF TRUTH for this project, not a mirror of the code. ' +
-      'Call harness_hello once, then harness_get_spec before writing code and implement from it. ' +
-      'Never edit the harness directly and never work around it: a structure or design change is proposed ' +
-      'with harness_propose_change (or harness_chat) and applied only after a human approves the diff.',
+      'Harness MCP holds a project harness — a durable specification a coding agent implements from. ' +
+      'It is per-project: every tool takes an explicit project_path, and a project has a harness only if ' +
+      '/harness exists in it. Check with harness_status; if there is none, say so and carry on normally — ' +
+      'assemble one (harness_init / harness_reverse) only when the user asks for it.\n' +
+      'Where a harness DOES exist it is the SOURCE OF TRUTH, not a mirror of the code: read it with ' +
+      'harness_get_spec before writing code and implement from it. Never edit it directly and never work ' +
+      'around it — a structure or design change is proposed with harness_propose_change (or harness_chat) ' +
+      'and applied only after a human approves the diff.',
   },
 );
 
