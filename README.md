@@ -8,7 +8,7 @@ design rules, requirements and phased tasks. The agent reads it, writes code fro
 it, and may only **propose** changes to it. Nothing enters the harness until a
 human accepts a diff.
 
-Zero native dependencies · one runtime package · 20 tools · MIT
+Zero native dependencies · one runtime package · 21 tools · 81 tests · MIT
 
 ---
 
@@ -193,6 +193,7 @@ source that can fill the normalized set works.
 | `harness_set_design_tokens` | Design tokens handed in by the host |
 | `harness_sync_design_system` | The harness pulls tokens and rules itself |
 | `harness_list_pending` | Pending changes + the unapproved-count badge |
+| `harness_history` | The decision record: every approval joined to what it decided |
 | `harness_approve` / `harness_reject` | The human decision — the only thing that mutates the harness |
 | `summarize_session_to_harness` | Structured session summary → per-item proposals |
 | `harness_render` | The visualization (webview HTML or browser) |
@@ -242,15 +243,24 @@ Early but real. Honest about where it stands:
 
 - **Works today:** the full loop — assemble, propose, approve/reject, render,
   verify, checkpoint/restore — under both model modes and both render modes,
-  covered by 30 tests.
-- **Not yet battle-tested.** It has been exercised against real projects and a real
-  design-system MCP, but it has not lived through months of daily use. Expect
+  covered by 81 tests. Every tool is exercised over real stdio JSON-RPC, not just
+  through the internal function, and a test fails the build if a new one slips in
+  uncovered.
+- **Dogfooded.** The server has assembled a harness for itself, over the protocol,
+  from an editor. That run found four defects the 60 tests of the day had not:
+  decisions silently losing their `[assumption]` marker, an approval table nothing
+  could read, no protocol-level tests at all, and a capability probe that measured
+  before the handshake. Using it for real remains the best test it has.
+- **Not yet battle-tested.** It has not lived through months of daily use. Expect
   rough edges in the assembly prompts before you expect them in the storage.
-- **The editor integration is not written yet.** It speaks plain MCP, so any client
-  can drive it, but the webview panel and the automatic `harness_hello` handshake
-  for [Peregrine](https://github.com/mykolariabokon/project-mind-ui) are still to
-  come. Until then a host announces itself by calling `harness_hello`, or you pin
-  the mode in `config.json`.
+- **The universal model path is stubbed, not proven.** Its request shape, auth
+  headers, response parsing, retry and error handling are covered against a
+  stubbed transport, so the local risk is pinned down — but no test spends a real
+  token against a live provider.
+- **Editor integration exists for [Peregrine](https://github.com/mykolariabokon/project-mind-ui)**:
+  panel, design tokens, and the review screen where diffs, approve/reject and a
+  chat box live together. Any other client drives the server over plain MCP —
+  announce the host with `harness_hello`, or pin the mode in `config.json`.
 - **Token mapping assumes a palette shape** (`neutral.0/50/200/500/800`,
   `brand.500`). A design system with different scale names falls back to neutral
   defaults — it will not break, but it will not pick up your brand either.
@@ -262,9 +272,18 @@ Early but real. Honest about where it stands:
 
 ```bash
 npm run build     # tsc → build/
-npm test          # vitest — lifecycle (assemble → propose → approve → verify → restore)
-                  #          + store durability (torn write, corrupt file, migration)
+npm test          # tsc, then vitest — 81 tests:
+                  #   lifecycle    assemble → propose → approve → verify → restore
+                  #   protocol     every tool over real stdio JSON-RPC
+                  #   store        torn write, corrupt file, migration, concurrency
+                  #   quality      flat structure, orphan parent, mute assumption
+                  #   universal    provider request shape, parsing, retry, refusal
+                  #   render       per-type layout, no-JS switching, both token paths
 ```
+
+`npm test` compiles first on purpose: the protocol suite drives the built server,
+and a silent run against yesterday's compile is the exact failure it exists to
+catch. It refuses to start if `src/` is newer than `build/`.
 
 `"type": "module"` — relative imports need the `.js` extension. `tsc --noEmit` does
 not catch a missing one; only running does.
@@ -294,13 +313,16 @@ Saying so plainly matters more than the badge. What it means in practice:
   is backed by a test or by a command that was actually executed — including the
   Electron-runtime check, which exists precisely because *"it should work"* was not
   good enough.
-- **A test caught a real bug during development** (a migration that applied in
-  memory but never persisted, because the migration function mutated its input).
-  That is the point of writing them rather than asserting quality.
+- **Tests and use both caught real bugs, and use caught more.** A test found a
+  migration that applied in memory but never persisted. Then the server was
+  pointed at itself, over the protocol, from an editor — and that single session
+  surfaced four defects the whole suite had missed, including an approval table
+  written to on every decision and read by nothing. Writing tests is not the same
+  as using the thing.
 - **Read the code before you trust it.** That advice holds for any dependency; it
-  holds here too. It is a small codebase — about 3,800 lines of TypeScript plus
-  400 of tests — and the comments explain *why*, not *what*, so it is meant to be
-  read.
+  holds here too. It is a small codebase — about 4,500 lines of TypeScript plus
+  1,400 of tests — and the comments explain *why*, not *what*, so it is meant to
+  be read.
 
 There is a pleasing symmetry in a tool that exists to keep AI agents honest about
 specifications having been built by one, under review, from a specification.

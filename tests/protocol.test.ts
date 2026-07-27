@@ -61,24 +61,31 @@ async function call(name: string, args: Record<string, unknown>): Promise<any> {
   return JSON.parse(text!);
 }
 
-beforeAll(async () => {
-  if (!fs.existsSync(entry)) {
-    throw new Error(`${entry} is missing — run \`npm run build\` before the protocol tests.`);
+const newestMtime = (dir: string): number => {
+  let latest = 0;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    latest = Math.max(latest, e.isDirectory() ? newestMtime(p) : fs.statSync(p).mtimeMs);
   }
-  // A stale build is the failure mode this whole file exists to catch, so refuse
-  // to pass on yesterday's compile rather than report a false green.
-  const newest = (dir: string): number => {
-    let latest = 0;
-    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      const p = path.join(dir, e.name);
-      latest = Math.max(latest, e.isDirectory() ? newest(p) : fs.statSync(p).mtimeMs);
-    }
-    return latest;
-  };
-  if (newest(path.join(repo, 'src')) > newest(path.join(repo, 'build'))) {
-    throw new Error('src/ is newer than build/ — run `npm run build`, or these tests check stale code.');
-  }
+  return latest;
+};
 
+/**
+ * Checked at module scope, deliberately — NOT in beforeAll.
+ *
+ * A throw from beforeAll makes vitest report this file's tests as *skipped*, and
+ * a skip reads as green in the summary line. A guard against false greens that
+ * produces one is worse than no guard: observed here, eight silently skipped
+ * protocol tests in a run that ended "73 passed". Failing collection is loud.
+ */
+if (!fs.existsSync(entry)) {
+  throw new Error(`${entry} is missing — run \`npm run build\` before the protocol tests.`);
+}
+if (newestMtime(path.join(repo, 'src')) > newestMtime(path.join(repo, 'build'))) {
+  throw new Error('src/ is newer than build/ — run `npm run build`, or these tests check stale code.');
+}
+
+beforeAll(async () => {
   project = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-proto-'));
   server = spawn(process.execPath, [entry], { stdio: ['pipe', 'pipe', 'pipe'] });
 
