@@ -1,0 +1,5 @@
+# Harness working state — the markdown spec next to it IS meant to be committed.
+harness.json
+.harness.json.*.tmp
+.cache/
+config.json

@@ -62,9 +62,14 @@ export function checkDraft(draft: HarnessDraft): QualityReport {
 
   // Documented since the first version, never actually enforced: an assumption
   // without a question is a guess the human has no way to correct.
-  const mute = [...structure, ...(draft.requirements ?? []), ...(draft.constitution ?? [])].filter(
-    (n) => n.confidence === 'assumption' && !n.question?.trim(),
-  );
+  const mute = [
+    ...structure,
+    ...(draft.requirements ?? []),
+    ...(draft.constitution ?? []),
+    // Decisions carry the doc-vs-code disagreements a reverse assembly infers —
+    // the most inference-heavy entries there are, and once the only ones exempt.
+    ...(draft.decisions ?? []),
+  ].filter((n) => n.confidence === 'assumption' && !n.question?.trim());
   if (mute.length) {
     errors.push(
       `${mute.length} entr(y/ies) marked confidence "assumption" carry no question: ` +

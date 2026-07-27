@@ -179,3 +179,40 @@ describe('panel guidance', () => {
     expect(html.html).toMatch(/Nothing waiting for approval\. Everything an agent proposes/);
   });
 });
+
+describe('decisions are not exempt from honesty', () => {
+  /**
+   * Found by dogfooding: a reverse assembly marked a doc-vs-code disagreement as
+   * confidence "assumption", and it was stored as "certain" — the draft path
+   * dropped the field entirely. Decisions are the most inference-heavy entries a
+   * reverse assembly produces, so silent false confidence is worst exactly there.
+   */
+  it('keeps a decision marked as an assumption', async () => {
+    const draft = {
+      ...treeDraft,
+      decisions: [{
+        key: 'DEC-01', title: 'Docs disagreed with the code',
+        body: 'README claims X, the code does Y.',
+        confidence: 'assumption',
+        question: 'Which is right — should the README be updated, or the code?',
+      }],
+    };
+    const res = await submit(await startReverse(), draft);
+    expect(res.status).toBe('assembled');
+    expect(res.assumptions).toBe(1);
+
+    const spec = (await callTool('harness_get_spec', { project_path: project, type: 'decision' })) as any;
+    const dec = spec.entries.find((e: any) => e.key === 'DEC-01');
+    expect(dec.confidence).toBe('assumption');
+    expect(dec.question).toMatch(/Which is right/);
+  });
+
+  it('rejects a decision assumption with no question, like every other entry', () => {
+    const report = checkDraft({
+      structure: [{ key: 'a', title: 'A', kind: 'module', parent: null }],
+      decisions: [{ key: 'D1', title: 'Guess', body: 'x', confidence: 'assumption' }],
+    } as never);
+    expect(report.ok).toBe(false);
+    expect(report.errors.join(' ')).toMatch(/no question/);
+  });
+});

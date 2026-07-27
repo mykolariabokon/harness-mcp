@@ -109,10 +109,19 @@ export const HARNESS_DRAFT_SCHEMA = {
     },
     decisions: {
       type: 'array',
+      description:
+        'Architectural decisions and their why. Reverse assembly also records a doc/code disagreement here — ' +
+        'and that reading is inference, so mark it confidence "assumption" with the question you would ask.',
       items: {
         type: 'object',
         required: ['key', 'title', 'body'],
-        properties: { key: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' } },
+        properties: {
+          key: { type: 'string' },
+          title: { type: 'string' },
+          body: { type: 'string' },
+          confidence: { enum: ['certain', 'assumption'] },
+          question: { type: 'string', description: 'Required when confidence is "assumption".' },
+        },
       },
     },
   },
@@ -147,7 +156,7 @@ export interface HarnessDraft {
   design_rules?: Array<{ rule: string; scope?: string }>;
   requirements?: Array<{ key: string; title: string; ears: string; why?: string; confidence?: Confidence; question?: string }>;
   steps?: Array<{ key: string; title: string; phase: number; body?: string; verify?: string }>;
-  decisions?: Array<{ key: string; title: string; body: string }>;
+  decisions?: Array<{ key: string; title: string; body: string; confidence?: Confidence; question?: string }>;
 }
 
 export interface ApplyDraftResult {
@@ -235,8 +244,16 @@ export function applyDraft(db: HarnessDb, draft: HarnessDraft): ApplyDraftResult
   });
 
   draft.decisions?.forEach((d, i) => {
-    db.upsertEntry({ type: 'decision', key: d.key, title: d.title, body: d.body, position: i });
-    count();
+    db.upsertEntry({
+      type: 'decision',
+      key: d.key,
+      title: d.title,
+      body: d.body,
+      confidence: d.confidence ?? 'certain',
+      question: d.question ?? null,
+      position: i,
+    });
+    count(d.confidence);
   });
 
   let rules = 0;
