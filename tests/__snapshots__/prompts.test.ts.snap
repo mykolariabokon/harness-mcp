@@ -1,0 +1,182 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`snapshots — a prompt change must be deliberate > chat reads as expected 1`] = `
+"The human is editing the harness with words. Turn the message below into precise
+harness changes.
+
+The harness is the durable specification a coding agent implements from, and it is
+the source of truth: what is not in it does not exist. It is not a report about the
+code — code is written from it afterwards, not the other way round.
+
+You may only PROPOSE. Every change queues with a diff and is applied when a human
+accepts it. Never propose a code edit — propose the harness edit, and the code
+follows from it.
+
+A change here becomes a permanent rule for the whole project, so scope it that way:
+a styling wish that should hold everywhere ("buttons are green") is a design_rule,
+not a per-screen note. Reuse existing keys when revising; only invent a key for
+something genuinely new.
+
+Message: Make the buttons green."
+`;
+
+exports[`snapshots — a prompt change must be deliberate > init reads as expected 1`] = `
+"Assemble the initial harness for a NEW project called "Demo".
+
+The harness is the durable specification a coding agent implements from, and it is
+the source of truth: what is not in it does not exist. It is not a report about the
+code — code is written from it afterwards, not the other way round.
+
+Be concrete and decidable — no "should probably", no placeholder sections. The
+result format is fixed by the JSON Schema you were given; follow it exactly rather
+than describing the shape back.
+
+Rules:
+- CONSTITUTION: stack, hard invariants, and the exact commands that verify the project.
+- STRUCTURE: real modules/entities/screens/flows with the repo path each will live at.
+
+- STRUCTURE IS A TREE, NOT A LIST. Every node except a root MUST carry \`parent\` —
+  the key of the node it lives inside. Roots (\`parent: null\`) are the applications
+  and packages of the repository, and there are only a few of them.
+  Group entities under the module they belong to, screens under their application,
+  components under their screen. Twenty-five nodes side by side at one level means
+  the work was not done — that answer is rejected and sent back.
+
+- Every node of kind "screen" MUST carry a \`layout\` skeleton, otherwise its mockup
+  renders empty and the human has nothing to judge.
+
+- REQUIREMENTS: EARS notation, each with the *why* from the description.
+- STEPS: phased, each ending in an executable \`verify\` command.
+
+- Anything the evidence does not settle is confidence "assumption" and MUST carry
+  the \`question\` you would ask the human. An assumption without a question is
+  rejected: it is a guess nobody can correct.
+
+Project description from the user:
+A small app."
+`;
+
+exports[`snapshots — a prompt change must be deliberate > reverse reads as expected 1`] = `
+"Reverse-assemble the harness for the EXISTING project "Demo" from its code.
+
+The code is the evidence. Documentation is only a hint: where docs and code disagree,
+THE CODE WINS and you note the disagreement as a decision entry.
+
+Be concrete and decidable — no "should probably", no placeholder sections. The
+result format is fixed by the JSON Schema you were given; follow it exactly rather
+than describing the shape back.
+
+Rules:
+- Anything read directly off the code (a module that exists, a script in package.json)
+  is confidence "certain". Intent is never readable off code — why a boundary sits
+  where it does, what the product is for — so it is inferred, and inference is an
+  assumption.
+- STRUCTURE nodes must use real repo paths taken from the inventory.
+
+The inventory came from a semantic analysis of the codebase, not a shallow file
+walk: symbols and dependencies in it are resolved, so trust its module boundaries
+over your own reading of directory names.
+
+- STRUCTURE IS A TREE, NOT A LIST. Every node except a root MUST carry \`parent\` —
+  the key of the node it lives inside. Roots (\`parent: null\`) are the applications
+  and packages of the repository, and there are only a few of them.
+  Group entities under the module they belong to, screens under their application,
+  components under their screen. Twenty-five nodes side by side at one level means
+  the work was not done — that answer is rejected and sent back.
+
+  The repository layout already tells you the tree: a node at \`apps/web/settings\` is a
+  child of the node at \`apps/web\`, which is a child of nothing.
+
+- Every node of kind "screen" MUST carry a \`layout\` skeleton, otherwise its mockup
+  renders empty and the human has nothing to judge.
+
+- Anything the evidence does not settle is confidence "assumption" and MUST carry
+  the \`question\` you would ask the human. An assumption without a question is
+  rejected: it is a guess nobody can correct.
+
+- STEPS should describe what remains, not what already exists.
+
+Extra context from the caller — things the code cannot contain:
+Roadmap says X."
+`;
+
+exports[`snapshots — a prompt change must be deliberate > reverse without hint or index reads as expected 1`] = `
+"Reverse-assemble the harness for the EXISTING project "Demo" from its code.
+
+The code is the evidence. Documentation is only a hint: where docs and code disagree,
+THE CODE WINS and you note the disagreement as a decision entry.
+
+Be concrete and decidable — no "should probably", no placeholder sections. The
+result format is fixed by the JSON Schema you were given; follow it exactly rather
+than describing the shape back.
+
+Rules:
+- Anything read directly off the code (a module that exists, a script in package.json)
+  is confidence "certain". Intent is never readable off code — why a boundary sits
+  where it does, what the product is for — so it is inferred, and inference is an
+  assumption.
+- STRUCTURE nodes must use real repo paths taken from the inventory.
+
+- STRUCTURE IS A TREE, NOT A LIST. Every node except a root MUST carry \`parent\` —
+  the key of the node it lives inside. Roots (\`parent: null\`) are the applications
+  and packages of the repository, and there are only a few of them.
+  Group entities under the module they belong to, screens under their application,
+  components under their screen. Twenty-five nodes side by side at one level means
+  the work was not done — that answer is rejected and sent back.
+
+  The repository layout already tells you the tree: a node at \`apps/web/settings\` is a
+  child of the node at \`apps/web\`, which is a child of nothing.
+
+- Every node of kind "screen" MUST carry a \`layout\` skeleton, otherwise its mockup
+  renders empty and the human has nothing to judge.
+
+- Anything the evidence does not settle is confidence "assumption" and MUST carry
+  the \`question\` you would ask the human. An assumption without a question is
+  rejected: it is a guess nobody can correct.
+
+- STEPS should describe what remains, not what already exists."
+`;
+
+exports[`snapshots — a prompt change must be deliberate > rework reads as expected 1`] = `
+"The previous draft was rejected. This is attempt 2 of 2 —
+after that it is accepted as it stands, with the problems recorded against it, so
+fix them now.
+
+What was wrong:
+- flat structure
+
+Also worth fixing:
+- no layout
+
+Return the WHOLE harness again, corrected — not a patch, not only the part that was
+wrong.
+
+--- original task ---
+ORIGINAL"
+`;
+
+exports[`snapshots — a prompt change must be deliberate > structure reads as expected 1`] = `
+"Extend or revise the project STRUCTURE according to the instruction below.
+
+The harness is the durable specification a coding agent implements from, and it is
+the source of truth: what is not in it does not exist. It is not a report about the
+code — code is written from it afterwards, not the other way round.
+
+You may only PROPOSE. Every change queues with a diff and is applied when a human
+accepts it. Never propose a code edit — propose the harness edit, and the code
+follows from it.
+
+- STRUCTURE IS A TREE, NOT A LIST. Every node except a root MUST carry \`parent\` —
+  the key of the node it lives inside. Roots (\`parent: null\`) are the applications
+  and packages of the repository, and there are only a few of them.
+  Group entities under the module they belong to, screens under their application,
+  components under their screen. Twenty-five nodes side by side at one level means
+  the work was not done — that answer is rejected and sent back.
+
+A change here becomes a permanent rule for the whole project, so scope it that way:
+a styling wish that should hold everywhere ("buttons are green") is a design_rule,
+not a per-screen note. Reuse existing keys when revising; only invent a key for
+something genuinely new.
+
+Message: Add a settings screen."
+`;

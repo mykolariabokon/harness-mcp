@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { HarnessService } from './HarnessService.js';
 import { harnessExists } from './paths.js';
+import { build as buildPrompt } from './prompts/builder.js';
 import { apiKeySource, NO_HOST, saveConfig, universalModelReady, type HostCapabilities } from './config.js';
 import {
   applyDraft,
@@ -488,8 +489,11 @@ async function reverse(args: Args) {
     };
   }
   const name = projectName(args.project_path);
+  // A semantic index and a shallow file walk deserve different trust, and the
+  // instruction says so only when there is an index to trust.
+  const source = args.analysis ? 'analysis' : 'scan';
   const inventory = args.analysis ?? scanCode(svc.paths.projectRoot);
-  return runAssembly(svc, 'reverse', reverseInstructions(name, args.hint ?? null), {
+  return runAssembly(svc, 'reverse', reverseInstructions(name, args.hint ?? null, source), {
     project_name: name,
     inventory,
   });
@@ -718,18 +722,7 @@ async function chat(args: Args, message: string, purpose: string) {
   const svc = open(args);
   if (!message) throw new Error('message is required.');
 
-  const instructions = [
-    purpose === 'structure'
-      ? 'Extend or revise the project STRUCTURE according to the instruction below.'
-      : 'The human is editing the harness with words. Turn the message below into precise harness changes.',
-    '',
-    'The harness is the source of truth: a change here becomes a permanent rule for the whole project,',
-    'and code is written from it afterwards. Never propose a code edit — propose the harness edit.',
-    'A styling wish that should hold everywhere ("buttons are green") is a design_rule, not a per-screen note.',
-    'Reuse existing keys when revising; only invent a key for something genuinely new.',
-    '',
-    `Message: ${message}`,
-  ].join('\n');
+  const instructions = buildPrompt(purpose === 'structure' ? 'structure' : 'chat', { message });
 
   const outcome = await svc.bridge(HOST).generate({
     purpose,

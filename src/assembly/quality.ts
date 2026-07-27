@@ -1,3 +1,4 @@
+import { build as buildPrompt } from '../prompts/builder.js';
 import type { HarnessDraft } from '../assembly.js';
 
 /**
@@ -115,19 +116,19 @@ function findCycle(nodes: NonNullable<HarnessDraft['structure']>): string[] | nu
   return null;
 }
 
-/** What to tell the agent so the second attempt is better than the first. */
+/**
+ * What to tell the agent so the second attempt is better than the first.
+ *
+ * The warnings section is omitted when there are none, rather than rendering an
+ * empty heading: a list with nothing under it reads as "something was wrong here
+ * and we forgot to say what".
+ */
 export function reworkInstructions(original: string, report: QualityReport, attempt: number): string {
-  return [
-    `The previous draft was rejected. This is attempt ${attempt} of ${MAX_ATTEMPTS} — after that it is`,
-    'accepted as it stands, with the problems recorded against it, so fix them now.',
-    '',
-    'What was wrong:',
-    ...report.errors.map((e) => `- ${e}`),
-    ...(report.warnings.length ? ['', 'Also worth fixing:', ...report.warnings.map((w) => `- ${w}`)] : []),
-    '',
-    'Return the WHOLE harness again, corrected — not a patch, not only the part that was wrong.',
-    '',
-    '--- original task ---',
+  return buildPrompt('rework', {
+    attempt,
+    max_attempts: MAX_ATTEMPTS,
+    errors: report.errors,
+    warnings: report.warnings,
     original,
-  ].join('\n');
+  });
 }

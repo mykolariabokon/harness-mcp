@@ -1,0 +1,2 @@
+- REQUIREMENTS: EARS notation, each with the *why* from the description.
+- STEPS: phased, each ending in an executable `verify` command.

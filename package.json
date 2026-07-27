@@ -8,11 +8,13 @@
     "harness-mcp": "build/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "npm run prompts && tsc",
     "watch": "tsc --watch",
     "start": "node build/index.js",
     "dev": "tsc && node build/index.js",
-    "test": "tsc && vitest run"
+    "test": "npm run prompts && tsc && vitest run",
+    "prompts": "node scripts/build-prompts.mjs",
+    "prepare": "node scripts/build-prompts.mjs"
   },
   "keywords": [
     "mcp",

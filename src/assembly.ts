@@ -1,3 +1,4 @@
+import { build as buildPrompt } from './prompts/builder.js';
 import type { HarnessDb } from './db/HarnessDb.js';
 import type { Confidence, EntryData, LayoutNode } from './types.js';
 
@@ -266,65 +267,28 @@ export function applyDraft(db: HarnessDb, draft: HarnessDraft): ApplyDraftResult
 }
 
 /**
- * The single rule that decides whether the structure is usable. It is repeated in
- * both assembly prompts on purpose: a flat list passes every other check, renders
- * as a wall of sibling nodes, and is indistinguishable from a correct answer
- * unless it is asked for and verified explicitly.
+ * Instructions for forward assembly (new project, from the user's description).
+ *
+ * The text lives in `src/prompts/init/` and `src/prompts/shared/`, not here: a
+ * change to what the agent is told should read as a prompt diff, and the rules
+ * shared with reverse assembly must have exactly one wording.
  */
-const TREE_RULE = [
-  '- STRUCTURE IS A TREE, NOT A LIST. Every node except a root MUST carry `parent` —',
-  '  the key of the node it lives inside. Roots (`parent: null`) are the applications',
-  '  and packages of the repository, and there are only a few of them.',
-  '  Group entities under the module they belong to, screens under their application,',
-  '  components under their screen. Twenty-five nodes side by side at one level means',
-  '  the work was not done — that answer is rejected and sent back.',
-].join('\n');
-
-/** Instructions for forward assembly (new project, from the user's description). */
 export function initInstructions(description: string, projectName: string): string {
-  return [
-    `Assemble the initial harness for a NEW project called "${projectName}".`,
-    '',
-    'The harness is the durable specification a coding agent will implement from, and it is',
-    'the source of truth: what is not in it does not exist. Be concrete and decidable —',
-    'no "should probably", no placeholder sections.',
-    '',
-    'Rules:',
-    '- CONSTITUTION: stack, hard invariants, and the exact commands that verify the project.',
-    '- STRUCTURE: real modules/entities/screens/flows with the repo path each will live at.',
-    TREE_RULE,
-    '- Every node of kind "screen" MUST carry a `layout` skeleton, otherwise its mockup',
-    '  renders empty and the human has nothing to judge.',
-    '- REQUIREMENTS: EARS notation, each with the *why* from the description.',
-    '- STEPS: phased, each ending in an executable `verify` command.',
-    '- Mark anything the description does not settle as confidence "assumption" and attach',
-    '  the `question` you would ask the human. An assumption without a question is rejected.',
-    '',
-    'Project description from the user:',
-    description,
-  ].join('\n');
+  return buildPrompt('init', { project_name: projectName, description });
 }
 
-/** Instructions for reverse assembly (existing project, from its code). */
-export function reverseInstructions(projectName: string, hint: string | null): string {
-  return [
-    `Reverse-assemble the harness for the EXISTING project "${projectName}" from its code.`,
-    '',
-    'The code is the evidence. Documentation is only a hint: where docs and code disagree,',
-    'THE CODE WINS and you note the disagreement as a decision entry.',
-    '',
-    'Rules:',
-    '- Anything read directly off the code (a module that exists, a script in package.json)',
-    '  is confidence "certain".',
-    '- Anything inferred (intent, why a boundary is where it is, product requirements) is',
-    '  confidence "assumption" and MUST carry a question for the human — code cannot contain intent.',
-    '- STRUCTURE nodes must use real repo paths taken from the inventory.',
-    TREE_RULE,
-    '  The repository layout already tells you the tree: a node at `apps/web/settings` is a',
-    '  child of the node at `apps/web`, which is a child of nothing.',
-    '- Every node of kind "screen" MUST carry a `layout` skeleton, otherwise its mockup',
-    '  renders empty and the human has nothing to judge.',
-    '- STEPS should describe what remains, not what already exists.',
-    hint ? `\nExtra context from the caller:\n${hint}` : '',
-  ].join('\n');
+/**
+ * Instructions for reverse assembly (existing project, from its code).
+ *
+ * `inventory` says where the evidence came from. A semantic index and a shallow
+ * file walk deserve different trust, and the section saying so exists only when
+ * there is an index to trust — nothing tells the agent about a capability it
+ * does not have.
+ */
+export function reverseInstructions(
+  projectName: string,
+  hint: string | null,
+  inventory: 'scan' | 'analysis' = 'scan',
+): string {
+  return buildPrompt('reverse', { project_name: projectName, hint, inventory });
 }

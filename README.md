@@ -8,7 +8,7 @@ design rules, requirements and phased tasks. The agent reads it, writes code fro
 it, and may only **propose** changes to it. Nothing enters the harness until a
 human accepts a diff.
 
-Zero native dependencies · one runtime package · 21 tools · 81 tests · MIT
+Zero native dependencies · one runtime package · 21 tools · 103 tests · MIT
 
 ---
 
@@ -213,6 +213,38 @@ Each decision and each open question becomes its **own** pending item, so a huma
 approves the session point by point instead of accepting a blob of text. That is
 the difference between "the agent wrote something down" and a specification.
 
+## Prompts
+
+The instructions that assembly runs on are the highest-leverage text here — they
+decide what a harness ends up containing — so they live in markdown, not in string
+concatenation:
+
+```
+src/prompts/
+├── shared/     tree-rule · screen-layout · assumption-marking · harness-principle …
+├── init/  reverse/  chat/  structure/  rework/
+└── builder.ts  composes sections, resolves {{placeholders}}
+```
+
+Three rules hold it together:
+
+- **One wording per rule.** Anything two tools both say lives in `shared/` and is
+  composed into both. The tree rule and the screen-layout rule used to be stated
+  twice, in their own words, free to drift apart.
+- **A section exists only when its capability does** — the
+  `inv-no-advice-without-capability` invariant. Not "if you have an index, trust
+  it", but: no such section when there is no index. Advising an agent to use
+  something absent costs a turn and teaches it to distrust the rest.
+- **The instruction is provider-agnostic.** The same assembled text is handed to
+  the editor's agent (native) or sent to the configured model (universal); a test
+  pins the two to identical output and fails on any provider-shaped wording. The
+  JSON Schema travels alongside and remains the only description of result shape.
+
+Fragments are inlined into a generated module at build time — the server ships to
+the editor as a single esbuild bundle, where loose markdown would not travel. The
+generated file is git-ignored so a prompt change shows up as a prompt diff and
+nothing else. Snapshot tests make changing one a deliberate act.
+
 ## Storage: a JSON file, not SQLite
 
 This server is meant to ship *inside* an editor, so it must have **zero native
@@ -243,7 +275,7 @@ Early but real. Honest about where it stands:
 
 - **Works today:** the full loop — assemble, propose, approve/reject, render,
   verify, checkpoint/restore — under both model modes and both render modes,
-  covered by 81 tests. Every tool is exercised over real stdio JSON-RPC, not just
+  covered by 103 tests. Every tool is exercised over real stdio JSON-RPC, not just
   through the internal function, and a test fails the build if a new one slips in
   uncovered.
 - **Dogfooded.** The server has assembled a harness for itself, over the protocol,
@@ -272,12 +304,13 @@ Early but real. Honest about where it stands:
 
 ```bash
 npm run build     # tsc → build/
-npm test          # tsc, then vitest — 81 tests:
+npm test          # regenerate prompts, tsc, then vitest — 103 tests:
                   #   lifecycle    assemble → propose → approve → verify → restore
                   #   protocol     every tool over real stdio JSON-RPC
                   #   store        torn write, corrupt file, migration, concurrency
                   #   quality      flat structure, orphan parent, mute assumption
                   #   universal    provider request shape, parsing, retry, refusal
+                  #   prompts      composition, conditional sections, snapshots
                   #   render       per-type layout, no-JS switching, both token paths
 ```
 
