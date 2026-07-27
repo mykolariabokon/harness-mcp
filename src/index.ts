@@ -51,15 +51,13 @@ async function main(): Promise<void> {
   await server.connect(new StdioServerTransport());
 
   // stdout is the protocol channel — diagnostics must go to stderr.
-  // The capability line is the measurement STEP-06 asks for before any code is
-  // written against elicitation: which clients actually declare it, observed
-  // rather than assumed.
-  const caps = server.getClientCapabilities();
-  const client = server.getClientVersion();
-  console.error(
-    `harness-mcp ready (stdio) · client=${client?.name ?? 'unknown'}@${client?.version ?? '?'} · ` +
-      `capabilities=${caps ? Object.keys(caps).join(',') || 'none' : 'undeclared'}`,
-  );
+  //
+  // Capabilities are NOT read here: `connect()` resolves once the pipe is open,
+  // and the client sends `initialize` only afterwards, so anything read at this
+  // point is empty. Measured the wrong moment once already and the log dutifully
+  // reported "undeclared" for a client that had not been asked yet. The probe is
+  // lazy instead, and harness_hello reports what it finds.
+  console.error('harness-mcp ready (stdio)');
 }
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

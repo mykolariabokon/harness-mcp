@@ -39,6 +39,11 @@ export function setClientCapabilitiesProbe(fn: () => Record<string, unknown> | u
   CLIENT_CAPS = fn;
 }
 
+/** Read lazily, never at connect time: `initialize` arrives after the pipe opens. */
+function clientCapabilityNames(): string[] {
+  return Object.keys(CLIENT_CAPS() ?? {});
+}
+
 /** Does the client support being asked a question mid-call? */
 function clientCanElicit(): boolean {
   return Boolean(CLIENT_CAPS()?.elicitation);
@@ -435,12 +440,19 @@ function hello(args: Args) {
     webview: Boolean(args.webview),
     name: args.editor ?? null,
   };
+  const caps = clientCapabilityNames();
   const result: Record<string, unknown> = {
     host: HOST,
     model_source: HOST.agent_model
       ? 'native — the harness will hand generation back to your agent via status "needs_agent"'
       : 'universal — the harness will use the model in /harness/config.json',
     render_output: HOST.webview ? 'webview — HTML is returned to you' : 'browser — served on localhost',
+    // What the CLIENT declared in the protocol, as opposed to what the editor
+    // claimed above. The decision path branches on this, never on the editor name.
+    client_capabilities: caps.length ? caps : ['none declared'],
+    decision_path: clientCanElicit()
+      ? 'elicitation — the harness can ask you to approve a change through your own client UI'
+      : 'queue — proposals wait in pending_changes for an explicit harness_approve',
   };
   if (args.project_path && harnessExists(args.project_path)) {
     result.status = HarnessService.open(args.project_path).status();
