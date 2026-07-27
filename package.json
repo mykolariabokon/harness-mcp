@@ -12,7 +12,7 @@
     "watch": "tsc --watch",
     "start": "node build/index.js",
     "dev": "tsc && node build/index.js",
-    "test": "vitest run"
+    "test": "tsc && vitest run"
   },
   "keywords": [
     "mcp",

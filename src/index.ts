@@ -2,7 +2,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { callTool, TOOL_DEFS } from './tools.js';
+import { callTool, setClientCapabilitiesProbe, TOOL_DEFS } from './tools.js';
 import { HarnessService } from './HarnessService.js';
 
 /**
@@ -47,9 +47,19 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 });
 
 async function main(): Promise<void> {
+  setClientCapabilitiesProbe(() => server.getClientCapabilities() as Record<string, unknown> | undefined);
   await server.connect(new StdioServerTransport());
+
   // stdout is the protocol channel — diagnostics must go to stderr.
-  console.error('harness-mcp ready (stdio)');
+  // The capability line is the measurement STEP-06 asks for before any code is
+  // written against elicitation: which clients actually declare it, observed
+  // rather than assumed.
+  const caps = server.getClientCapabilities();
+  const client = server.getClientVersion();
+  console.error(
+    `harness-mcp ready (stdio) · client=${client?.name ?? 'unknown'}@${client?.version ?? '?'} · ` +
+      `capabilities=${caps ? Object.keys(caps).join(',') || 'none' : 'undeclared'}`,
+  );
 }
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

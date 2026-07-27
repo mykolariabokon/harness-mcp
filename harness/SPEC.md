@@ -12,6 +12,18 @@ When a project has no harness and the user asks to assemble one, the system shal
 
 _Why:_ Харнес — джерело правди, а не звіт про код. Повторна збірка перетворила б його на дзеркало й узаконила дрейф.
 
+### REQ-013 — Історію рішень можна прочитати
+
+When a human asks what has already been decided, the system shall return the approval history — each decision with its change reference, actor, note and time — together with the stored session summaries.
+
+_Why:_ Харнес записує кожне затвердження й кожне саммарі сесії, але жоден інструмент їх не читає — дані накопичуються в нікуди. Підзвітність, якою неможливо скористатися, гірша за її відсутність: вона створює хибне відчуття, що рішення збережені й доступні. Історія затверджень — це і є пам'ять про те, ЧОМУ харнес такий, а не інший.
+
+### REQ-014 — Рішення питається через клієнта, а не через власний екран
+
+When the client declares elicitation support, the system shall request the human decision on a pending change through the client's own interface and apply the answer in the same call; when it does not, the change shall stay in the queue for an explicit harness_approve.
+
+_Why:_ Рішення людини — єдиний крок циклу, який не можна нікому делегувати, і саме він досі вимагає власного екрана в КОЖНОМУ редакторі: Peregrine має свій, Claude Code не має жодного, наступному клієнтові треба буде третій. Elicitation переносить це в протокол: клієнт малює запит своїм інтерфейсом, а харнес перестає знати, в якому він редакторі. Принцип при цьому не слабшає: змінюється СПОСІБ запитати, а не те, хто відповідає. Черга лишається фолбеком, а не видаляється: клієнт без elicitation має працювати як раніше.
+
 ### REQ-002 — Агент лише пропонує
 
 When an agent requests any change to the harness, the system shall record it in pending_changes with a rendered diff and shall not apply it until a human calls harness_approve.

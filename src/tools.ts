@@ -24,6 +24,26 @@ import fs from 'node:fs';
 /** Capabilities of the editor we are plugged into — set by `harness_hello`. */
 let HOST: HostCapabilities = { ...NO_HOST };
 
+/**
+ * What the MCP client itself declared at connect time, as opposed to what the
+ * editor claimed in `harness_hello`.
+ *
+ * The distinction matters for STEP-06: elicitation is a protocol capability the
+ * client either has or does not, and branching on it must read the declaration
+ * rather than the editor's name. Injected from index.ts so tools.ts stays free of
+ * the server instance.
+ */
+let CLIENT_CAPS: () => Record<string, unknown> | undefined = () => undefined;
+
+export function setClientCapabilitiesProbe(fn: () => Record<string, unknown> | undefined): void {
+  CLIENT_CAPS = fn;
+}
+
+/** Does the client support being asked a question mid-call? */
+function clientCanElicit(): boolean {
+  return Boolean(CLIENT_CAPS()?.elicitation);
+}
+
 const PROJECT_PATH = {
   type: 'string',
   description: 'Absolute path to the project root. Always pass it explicitly.',
@@ -217,6 +237,21 @@ export const TOOL_DEFS: ToolDef[] = [
     ),
   },
   {
+    name: 'harness_history',
+    description:
+      'The decision record: every approval and rejection with the change it decided, who decided, when, and any note — ' +
+      'plus the stored session summaries. The harness says WHAT the project is; this says why it says that, and when ' +
+      'it was settled. Read it before re-opening a question that already has an answer.',
+    inputSchema: obj(
+      {
+        project_path: PROJECT_PATH,
+        limit: { type: 'integer', description: 'How many entries per section. Default 50.' },
+        include: { enum: ['approvals', 'sessions', 'all'], description: 'Default "all".' },
+      },
+      ['project_path'],
+    ),
+  },
+  {
     name: 'harness_list_pending',
     description: 'Pending changes with their diffs, plus the unapproved-count badge.',
     inputSchema: obj(
@@ -362,6 +397,8 @@ export async function callTool(name: string, args: Args): Promise<unknown> {
       return setDesignTokens(args);
     case 'harness_sync_design_system':
       return syncDesignSystem(args);
+    case 'harness_history':
+      return history(args);
     case 'harness_list_pending':
       return listPending(args);
     case 'harness_approve':
@@ -856,6 +893,51 @@ function queueDesignRules(svc: HarnessService, rules: ImportedRule[], source: st
     .map((r) =>
       svc.proposeDesignRule('create', 'new', r, `Imported from ${source}.`, `design-system:${source}`),
     );
+}
+
+/**
+ * The decision record (REQ-013).
+ *
+ * Approvals were being written on every decision and read by nothing — the table
+ * was write-only, so the harness recorded accountability nobody could exercise.
+ *
+ * An approval on its own says "change 5 was approved", which means nothing once
+ * the queue has moved on, so each one is joined back to the change it decided.
+ * That is the whole point: the record has to answer "why is the harness like
+ * this", not just "something was approved".
+ */
+function history(args: Args) {
+  const svc = open(args);
+  const limit = Number(args.limit ?? 50);
+  const include = (args.include ?? 'all') as 'approvals' | 'sessions' | 'all';
+  const out: Record<string, unknown> = {};
+
+  if (include !== 'sessions') {
+    out.approvals = svc.db.listApprovals(limit).map((a) => {
+      const change = svc.db.getChange(a.change_id);
+      return {
+        decided_at: a.created_at,
+        decision: a.decision,
+        actor: a.actor,
+        note: a.note,
+        change_id: a.change_id,
+        // Null when the change predates a checkpoint restore, which wipes the
+        // queue but keeps the approvals: say so rather than imply it never existed.
+        ref: change?.ref ?? null,
+        op: change?.op ?? null,
+        rationale: change?.rationale ?? null,
+      };
+    });
+  }
+  if (include !== 'approvals') out.sessions = svc.db.listSessionSummaries(limit);
+
+  return {
+    ...out,
+    checkpoints: svc.db.listCheckpoints(),
+    note:
+      'This is the record of decisions already made. A question answered here does not need re-deciding — ' +
+      'and a change that contradicts one should say why.',
+  };
 }
 
 function listPending(args: Args) {
