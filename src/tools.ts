@@ -50,6 +50,32 @@ function clientCanElicit(): boolean {
   return Boolean(CLIENT_CAPS()?.elicitation);
 }
 
+/** Ask the human something through the client's own interface, mid-call. */
+export interface ElicitForm {
+  message: string;
+  requestedSchema: {
+    type: 'object';
+    properties: Record<string, { type: 'string'; title?: string; description?: string; enum?: string[] }>;
+    required?: string[];
+  };
+}
+export interface ElicitAnswer {
+  action: 'accept' | 'decline' | 'cancel';
+  content?: Record<string, unknown>;
+}
+type Elicitor = (form: ElicitForm) => Promise<ElicitAnswer>;
+
+/**
+ * Injected from index.ts, which owns the Server instance. Absent in tests unless
+ * a fake is installed — which is the point: both branches are reachable without
+ * an editor.
+ */
+let ELICIT: Elicitor | null = null;
+
+export function setElicitor(fn: Elicitor | null): void {
+  ELICIT = fn;
+}
+
 const PROJECT_PATH = {
   type: 'string',
   description: 'Absolute path to the project root. Always pass it explicitly.',
@@ -243,6 +269,21 @@ export const TOOL_DEFS: ToolDef[] = [
     ),
   },
   {
+    name: 'harness_review',
+    description:
+      'Walk the pending changes with the human: each diff is put in front of them through their own client, ' +
+      'and their answer is applied in the same call. Use this instead of list → read → approve where the client ' +
+      'supports being asked; where it does not, this returns the queue and nothing is applied. ' +
+      'The decision stays the human\'s either way — this only changes how they are asked.',
+    inputSchema: obj(
+      {
+        project_path: PROJECT_PATH,
+        limit: { type: 'integer', description: 'Most changes to put in front of the human at once. Default 10.' },
+      },
+      ['project_path'],
+    ),
+  },
+  {
     name: 'harness_history',
     description:
       'The decision record: every approval and rejection with the change it decided, who decided, when, and any note — ' +
@@ -403,6 +444,8 @@ export async function callTool(name: string, args: Args): Promise<unknown> {
       return setDesignTokens(args);
     case 'harness_sync_design_system':
       return syncDesignSystem(args);
+    case 'harness_review':
+      return review(args);
     case 'harness_history':
       return history(args);
     case 'harness_list_pending':
@@ -898,6 +941,120 @@ function queueDesignRules(svc: HarnessService, rules: ImportedRule[], source: st
     .map((r) =>
       svc.proposeDesignRule('create', 'new', r, `Imported from ${source}.`, `design-system:${source}`),
     );
+}
+
+/**
+ * Put each pending diff in front of the human through their own client, and apply
+ * the answer in the same call (REQ-014 / STEP-06).
+ *
+ * Every editor used to need its own review screen — Peregrine has one, a bare MCP
+ * client had none. Elicitation moves that into the protocol: the client draws the
+ * question with its own interface and the harness stops caring which editor it is
+ * plugged into.
+ *
+ * What does NOT change is who decides. This is a different way of asking, not a
+ * different answerer: the branches below both end in svc.approve / svc.reject, the
+ * same calls `harness_approve` makes.
+ */
+async function review(args: Args) {
+  const svc = open(args);
+  const limit = Math.max(1, Number(args.limit ?? 10));
+  // Oldest first: the human should meet the changes in the order they were proposed.
+  const queue = svc.db.listPending('pending').slice().reverse();
+
+  if (!queue.length) {
+    return { status: 'nothing_pending', reviewed: 0, note: 'The queue is empty — nothing is waiting on you.' };
+  }
+
+  // Branch on the declared capability, never on the editor's name: a client either
+  // supports being asked or it does not, and it is the one who says so.
+  if (!clientCanElicit() || !ELICIT) {
+    return {
+      status: 'queue_only',
+      badge: queue.length,
+      changes: queue,
+      note:
+        'This client did not declare elicitation, so it cannot be asked mid-call. Nothing was applied. ' +
+        'Show these diffs to the human and call harness_approve or harness_reject with what they decide.',
+    };
+  }
+
+  const decided: Array<{ id: number; ref: string; decision: string }> = [];
+  const skipped: Array<{ id: number; ref: string; why: string }> = [];
+  let stopped = false;
+
+  for (const change of queue.slice(0, limit)) {
+    const answer = await ELICIT({
+      message: reviewMessage(change),
+      requestedSchema: {
+        type: 'object',
+        properties: {
+          decision: {
+            type: 'string',
+            title: 'Decision',
+            description: 'Approve to apply it to the harness, reject to discard it.',
+            enum: ['approve', 'reject'],
+          },
+          note: {
+            type: 'string',
+            title: 'Note',
+            description: 'Why — kept in the decision record, and worth writing when you reject.',
+          },
+        },
+        required: ['decision'],
+      },
+    });
+
+    // Declining the question is NOT rejecting the change, and dismissing it is not
+    // either. Conflating them would apply a decision the human never made — the one
+    // failure this whole tool exists to make impossible.
+    if (answer.action === 'cancel') {
+      stopped = true;
+      skipped.push({ id: change.id, ref: change.ref, why: 'dismissed — still pending' });
+      break;
+    }
+    if (answer.action !== 'accept') {
+      skipped.push({ id: change.id, ref: change.ref, why: 'declined to answer — still pending' });
+      continue;
+    }
+
+    const decision = String(answer.content?.decision ?? '');
+    const note = typeof answer.content?.note === 'string' ? answer.content.note : null;
+    if (decision !== 'approve' && decision !== 'reject') {
+      skipped.push({ id: change.id, ref: change.ref, why: `unrecognised answer "${decision}" — still pending` });
+      continue;
+    }
+
+    // The same calls harness_approve makes: one path to apply, so the discipline
+    // cannot fork into a lenient version.
+    if (decision === 'approve') svc.approve(change.id, 'human', note);
+    else svc.reject(change.id, 'human', note);
+    decided.push({ id: change.id, ref: change.ref, decision });
+  }
+
+  const remaining = svc.db.pendingCount();
+  return {
+    status: decided.length ? 'reviewed' : 'nothing_decided',
+    decided,
+    skipped,
+    stopped_early: stopped,
+    pending_total: remaining,
+    note: remaining
+      ? `${remaining} change(s) still waiting. Run harness_review again when the human is ready.`
+      : 'The queue is empty.',
+  };
+}
+
+/** What the human reads before deciding: what, why, and the diff itself. */
+function reviewMessage(c: { id: number; op: string; ref: string; rationale: string; diff: string; source: string }): string {
+  return [
+    `${c.op.toUpperCase()} ${c.ref}  (#${c.id}, from ${c.source})`,
+    c.rationale ? `\n${c.rationale}` : '',
+    '',
+    c.diff || '(no diff)',
+  ]
+    .filter((part) => part !== '')
+    .join('\n');
 }
 
 /**

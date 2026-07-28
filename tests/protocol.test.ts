@@ -174,6 +174,12 @@ describe('the server over stdio JSON-RPC', () => {
     const queue = await call('harness_list_pending', { project_path: project });
     expect(queue.badge).toBe(1);
 
+    // This client declared no capabilities at initialize, so it cannot be asked
+    // mid-call: review must hand the queue back untouched rather than assume.
+    const review = await call('harness_review', { project_path: project });
+    expect(review.status).toBe('queue_only');
+    expect(review.badge).toBe(1);
+
     // Still untouched while it waits.
     const before = await call('harness_get_spec', { project_path: project, type: 'structure' });
     expect(before.entries.find((e: any) => e.key === 'ui').title).toBe('UI');

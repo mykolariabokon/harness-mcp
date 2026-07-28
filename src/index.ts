@@ -2,7 +2,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { callTool, setClientCapabilitiesProbe, TOOL_DEFS } from './tools.js';
+import { callTool, setClientCapabilitiesProbe, setElicitor, TOOL_DEFS } from './tools.js';
 import { HarnessService } from './HarnessService.js';
 
 /**
@@ -48,6 +48,9 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 
 async function main(): Promise<void> {
   setClientCapabilitiesProbe(() => server.getClientCapabilities() as Record<string, unknown> | undefined);
+  // The one place that knows how to ask the human. tools.ts stays free of the
+  // Server instance, and a test can install a fake in its place.
+  setElicitor((form) => server.elicitInput(form) as Promise<{ action: 'accept' | 'decline' | 'cancel'; content?: Record<string, unknown> }>);
   await server.connect(new StdioServerTransport());
 
   // stdout is the protocol channel — diagnostics must go to stderr.

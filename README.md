@@ -8,7 +8,7 @@ design rules, requirements and phased tasks. The agent reads it, writes code fro
 it, and may only **propose** changes to it. Nothing enters the harness until a
 human accepts a diff.
 
-Zero native dependencies · one runtime package · 21 tools · 106 tests · MIT
+Zero native dependencies · one runtime package · 22 tools · 118 tests · MIT
 
 ---
 
@@ -151,6 +151,18 @@ The same split applies to the **visualization**: one generator, two deliveries �
 the HTML is returned for a webview panel where the host has one, or served on
 `127.0.0.1` and opened in a browser where it does not.
 
+And to the **decision**. `harness_review` puts each pending diff in front of the
+human through the client's own interface and applies the answer in the same call,
+where the client declared [elicitation](https://modelcontextprotocol.io); where it
+did not, the same tool hands back the queue and applies nothing, leaving
+`harness_approve` to do the work. Every editor used to need its own review screen;
+this moves the asking into the protocol.
+
+The branch reads the *declared capability*, never the editor's name — a name is a
+claim, a declaration is a contract. And a different way of asking is not a
+different answerer: declining the question or dismissing it leaves the change
+pending, because neither is a decision. Both paths end in the same apply.
+
 The picture is an **output**. There is deliberately no direct manipulation: you
 criticise it in words through `harness_chat`, which turns the critique into
 proposed harness changes. You cannot drag a box into a different specification.
@@ -194,6 +206,7 @@ source that can fill the normalized set works.
 | `harness_set_design_tokens` | Design tokens handed in by the host |
 | `harness_sync_design_system` | The harness pulls tokens and rules itself |
 | `harness_list_pending` | Pending changes + the unapproved-count badge |
+| `harness_review` | Walk the queue with the human through their own client, applying each answer |
 | `harness_history` | The decision record: every approval joined to what it decided |
 | `harness_approve` / `harness_reject` | The human decision — the only thing that mutates the harness |
 | `summarize_session_to_harness` | Structured session summary → per-item proposals |
@@ -276,7 +289,7 @@ Early but real. Honest about where it stands:
 
 - **Works today:** the full loop — assemble, propose, approve/reject, render,
   verify, checkpoint/restore — under both model modes and both render modes,
-  covered by 106 tests. Every tool is exercised over real stdio JSON-RPC, not just
+  covered by 118 tests. Every tool is exercised over real stdio JSON-RPC, not just
   through the internal function, and a test fails the build if a new one slips in
   uncovered.
 - **Dogfooded.** The server has assembled a harness for itself, over the protocol,
@@ -305,7 +318,7 @@ Early but real. Honest about where it stands:
 
 ```bash
 npm run build     # tsc → build/
-npm test          # regenerate prompts, tsc, then vitest — 106 tests:
+npm test          # regenerate prompts, tsc, then vitest — 118 tests:
                   #   lifecycle    assemble → propose → approve → verify → restore
                   #   protocol     every tool over real stdio JSON-RPC
                   #   store        torn write, corrupt file, migration, concurrency
