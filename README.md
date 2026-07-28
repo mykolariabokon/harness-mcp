@@ -8,7 +8,7 @@ design rules, requirements and phased tasks. The agent reads it, writes code fro
 it, and may only **propose** changes to it. Nothing enters the harness until a
 human accepts a diff.
 
-Zero native dependencies · one runtime package · 21 tools · 103 tests · MIT
+Zero native dependencies · one runtime package · 21 tools · 106 tests · MIT
 
 ---
 
@@ -182,6 +182,7 @@ source that can fill the normalized set works.
 | Tool | Purpose |
 |---|---|
 | `harness_hello` | Handshake — the editor announces `agent_model` / `webview` |
+| `harness_status` | What the harness holds: counts, design rules, pending changes, open questions |
 | `harness_init` | Create `/harness`, assemble from a description (new project) |
 | `harness_reverse` | Assemble from existing code; code wins over stale docs, guesses are `[assumption]` + a question |
 | `harness_submit_generation` | Native-mode callback carrying the agent's structured result |
@@ -275,7 +276,7 @@ Early but real. Honest about where it stands:
 
 - **Works today:** the full loop — assemble, propose, approve/reject, render,
   verify, checkpoint/restore — under both model modes and both render modes,
-  covered by 103 tests. Every tool is exercised over real stdio JSON-RPC, not just
+  covered by 106 tests. Every tool is exercised over real stdio JSON-RPC, not just
   through the internal function, and a test fails the build if a new one slips in
   uncovered.
 - **Dogfooded.** The server has assembled a harness for itself, over the protocol,
@@ -304,7 +305,7 @@ Early but real. Honest about where it stands:
 
 ```bash
 npm run build     # tsc → build/
-npm test          # regenerate prompts, tsc, then vitest — 103 tests:
+npm test          # regenerate prompts, tsc, then vitest — 106 tests:
                   #   lifecycle    assemble → propose → approve → verify → restore
                   #   protocol     every tool over real stdio JSON-RPC
                   #   store        torn write, corrupt file, migration, concurrency
@@ -352,10 +353,15 @@ Saying so plainly matters more than the badge. What it means in practice:
   surfaced four defects the whole suite had missed, including an approval table
   written to on every decision and read by nothing. Writing tests is not the same
   as using the thing.
+- **The guards need guarding too.** A check added to stop the suite passing against
+  a stale build turned out to report its eight tests as *skipped* — and a skip
+  reads as green in the summary line. A guard against false greens that quietly
+  produced one. It now fails collection instead, verified by breaking the build on
+  purpose rather than by reasoning about it.
 - **Read the code before you trust it.** That advice holds for any dependency; it
-  holds here too. It is a small codebase — about 4,500 lines of TypeScript plus
-  1,400 of tests — and the comments explain *why*, not *what*, so it is meant to
-  be read.
+  holds here too. It is a small codebase — about 4,600 lines of TypeScript, 1,600
+  of tests, and 27 markdown fragments the prompts are composed from — and the
+  comments explain *why*, not *what*, so it is meant to be read.
 
 There is a pleasing symmetry in a tool that exists to keep AI agents honest about
 specifications having been built by one, under review, from a specification.
