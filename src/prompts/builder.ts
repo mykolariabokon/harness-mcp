@@ -14,7 +14,7 @@ import { FRAGMENTS } from './generated.js';
  * restated it would be a second source, free to drift.
  */
 
-export type PromptKind = 'init' | 'reverse' | 'chat' | 'structure' | 'rework';
+export type PromptKind = 'init' | 'reverse' | 'chat' | 'structure' | 'rework' | 'server';
 
 /**
  * What the caller can offer. A section keyed on a capability is omitted entirely
@@ -99,6 +99,11 @@ const RECIPES: Record<PromptKind, Section[]> = {
     onlyIf('rework/warnings', (c) => (c.warnings?.length ?? 0) > 0),
     always('rework/whole-again'),
   ],
+  // Sent at connect, before anything is known about the project — so no
+  // conditionals and no placeholders. It is here rather than inline in index.ts
+  // because it reaches EVERY session this server is registered for: the highest
+  // reach of any text in the project, and the one most worth reading as a diff.
+  server: [always('server/instructions')],
 };
 
 /** Which fragments a recipe can ever use — for the coverage test, and for docs. */

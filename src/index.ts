@@ -3,6 +3,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { callTool, setClientCapabilitiesProbe, setElicitor, TOOL_DEFS } from './tools.js';
+import { build as buildPrompt } from './prompts/builder.js';
 import { HarnessService } from './HarnessService.js';
 
 /**
@@ -18,18 +19,12 @@ const server = new Server(
   {
     capabilities: { tools: {} },
     // These reach EVERY session the server is registered for — including projects
-    // that have no harness at all. So they must start by saying how to tell, and
-    // must not push anyone into assembling one: an unwanted harness in a project
-    // nobody asked to specify is worse than no harness.
-    instructions:
-      'Harness MCP holds a project harness — a durable specification a coding agent implements from. ' +
-      'It is per-project: every tool takes an explicit project_path, and a project has a harness only if ' +
-      '/harness exists in it. Check with harness_status; if there is none, say so and carry on normally — ' +
-      'assemble one (harness_init / harness_reverse) only when the user asks for it.\n' +
-      'Where a harness DOES exist it is the SOURCE OF TRUTH, not a mirror of the code: read it with ' +
-      'harness_get_spec before writing code and implement from it. Never edit it directly and never work ' +
-      'around it — a structure or design change is proposed with harness_propose_change (or harness_chat) ' +
-      'and applied only after a human approves the diff.',
+    // that have no harness at all. So they must start by saying how to tell, must
+    // not push anyone into assembling one, and must say where the approval gate
+    // does NOT apply. The text lives in src/prompts/server/ for the same reason as
+    // the assembly prompts: a change to what every agent is told should read as a
+    // prompt diff.
+    instructions: buildPrompt('server', {}),
   },
 );
 

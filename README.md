@@ -8,7 +8,7 @@ design rules, requirements and phased tasks. The agent reads it, writes code fro
 it, and may only **propose** changes to it. Nothing enters the harness until a
 human accepts a diff.
 
-Zero native dependencies · one runtime package · 22 tools · 118 tests · MIT
+Zero native dependencies · one runtime package · 22 tools · 122 tests · MIT
 
 ---
 
@@ -289,7 +289,7 @@ Early but real. Honest about where it stands:
 
 - **Works today:** the full loop — assemble, propose, approve/reject, render,
   verify, checkpoint/restore — under both model modes and both render modes,
-  covered by 118 tests. Every tool is exercised over real stdio JSON-RPC, not just
+  covered by 122 tests. Every tool is exercised over real stdio JSON-RPC, not just
   through the internal function, and a test fails the build if a new one slips in
   uncovered.
 - **Dogfooded.** The server has assembled a harness for itself, over the protocol,
@@ -318,7 +318,7 @@ Early but real. Honest about where it stands:
 
 ```bash
 npm run build     # tsc → build/
-npm test          # regenerate prompts, tsc, then vitest — 118 tests:
+npm test          # regenerate prompts, tsc, then vitest — 122 tests:
                   #   lifecycle    assemble → propose → approve → verify → restore
                   #   protocol     every tool over real stdio JSON-RPC
                   #   store        torn write, corrupt file, migration, concurrency

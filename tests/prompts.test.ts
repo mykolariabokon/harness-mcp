@@ -22,6 +22,7 @@ const FULL: Record<PromptKind, Parameters<typeof build>[1]> = {
   chat: { message: 'Make the buttons green.' },
   structure: { message: 'Add a settings screen.' },
   rework: { attempt: 2, max_attempts: 2, errors: ['flat structure'], warnings: ['no layout'], original: 'ORIGINAL' },
+  server: {},
 };
 
 describe('composition', () => {
@@ -130,6 +131,33 @@ describe('one instruction, both modes', () => {
     // The JSON Schema travels with the instruction and is the single source of
     // truth about shape; prose repeating it would be a second, driftable one.
     expect(build('init', FULL.init)).toContain('JSON Schema');
+  });
+});
+
+describe('the instructions every session receives', () => {
+  const server = build('server', {});
+
+  it('says how to tell whether this project even has a harness', () => {
+    // They reach projects with no harness at all, so advising harness_get_spec
+    // unconditionally would be advice to call something that errors.
+    expect(server).toContain('harness_status');
+    expect(server).toMatch(/carry on normally/);
+  });
+
+  it('names the gate and what it is for', () => {
+    expect(server).toContain('harness_propose_change');
+    expect(server).toMatch(/only after a human approves/);
+  });
+
+  it('states where the gate does NOT apply', () => {
+    // inv-harness-scope. Without this the sibling invariant "the agent only
+    // proposes" over-applies, and a typo fix goes through an approval queue —
+    // ceremony that gets the tool routed around, and a routed-around harness
+    // protects nothing. The rule lived only in conversation until it was written
+    // here, which is the drift this project exists to prevent.
+    expect(server).toMatch(/not for every edit/i);
+    expect(server).toMatch(/typo/);
+    expect(server).toMatch(/fix it and move on/i);
   });
 });
 
