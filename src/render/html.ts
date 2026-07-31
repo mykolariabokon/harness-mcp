@@ -281,35 +281,53 @@ function layout(node: LayoutNode | null | undefined): string {
   const kids = (node.children ?? []).filter(Boolean);
   const inner = kids.map(layout).join('');
 
+  // Share of the row travels with every element, leaf or container: saying the
+  // chart takes two thirds is exactly the kind of "where the block goes" a
+  // sketch is for.
+  const sp = spanStyle(node);
+
   switch (el) {
     case 'stat':
-      return `<div class="el el-stat"><span class="el-cap">${label || 'stat'}</span><span class="el-num"></span></div>`;
+      return `<div class="el el-stat"${sp}><span class="el-cap">${label || 'stat'}</span><span class="el-num"></span></div>`;
     case 'chart':
-      return `<div class="el el-chart"><span class="el-cap">${label || 'chart'}</span><span class="el-plot"></span></div>`;
+      return `<div class="el el-chart"${sp}><span class="el-cap">${label || 'chart'}</span><span class="el-plot"></span></div>`;
     case 'button':
-      return `<span class="el el-button"><span>${label || 'button'}</span></span>`;
+      return `<span class="el el-button"${sp}><span>${label || 'button'}</span></span>`;
     case 'dropdown':
-      return `<div class="el el-dropdown"><span>${label || 'select'}</span><b class="caret">▾</b></div>`;
+      return `<div class="el el-dropdown"${sp}><span>${label || 'select'}</span><b class="caret">▾</b></div>`;
     case 'badge':
-      return `<span class="el el-badge">${label || 'badge'}</span>`;
+      return `<span class="el el-badge"${sp}>${label || 'badge'}</span>`;
     case 'table':
-      return `<div class="el el-table"><span class="el-cap">${label || 'table'}</span><span class="el-rows">${bars(4)}</span></div>`;
+      return `<div class="el el-table"${sp}><span class="el-cap">${label || 'table'}</span><span class="el-rows">${bars(4)}</span></div>`;
     case 'tabs':
-      return `<div class="el el-tabs"><span class="el-cap">${label || 'tabs'}</span><span class="el-chips">${
+      return `<div class="el el-tabs"${sp}><span class="el-cap">${label || 'tabs'}</span><span class="el-chips">${
         kids.length ? inner : chips(4)
       }</span></div>`;
   }
 
-  // Containers. A sidebar among the children means this row splits horizontally.
+  // Containers. An explicit `dir` wins; otherwise it is inferred, and inference is
+  // a guess: a sidebar among the children implies a horizontal split, some element
+  // types are rows by nature. The guess is a fallback for layouts written before
+  // the field existed, not the intended way to say it.
   const hasSidebar = kids.some((k) => k.el === 'sidebar');
-  const dir = hasSidebar || ROW_ELS.has(el) ? 'row' : 'col';
+  const dir = node.dir ?? (hasSidebar || ROW_ELS.has(el) ? 'row' : 'col');
   const cap = node.label ? label : TAGGED.has(el) ? el : '';
   // Empty list/form get faint placeholder bars (clearly skeleton); other empty
   // containers stay an empty frame — no invented content.
   const body = inner || (FILLED.has(el) ? bars(3) : '');
-  return `<div class="el el-${esc(el)} dir-${dir}">${
+  return `<div class="el el-${esc(el)} dir-${dir}"${spanStyle(node)}>${
     cap ? `<span class="el-cap">${cap}</span>` : ''
   }<div class="el-in">${body}</div></div>`;
+}
+
+/**
+ * `span` as a flex-basis in twelfths. Proportion, never a measurement — the
+ * skeleton says "a third of the row", not "340 pixels".
+ */
+function spanStyle(node: LayoutNode): string {
+  const span = node.span;
+  if (typeof span !== 'number' || span <= 0 || span >= 12) return '';
+  return ` style="flex:0 0 ${((span / 12) * 100).toFixed(4)}%"`;
 }
 
 const ROW_ELS = new Set(['header', 'controls', 'tabs', 'footer', 'toolbar', 'nav', 'row']);

@@ -8,7 +8,7 @@ design rules, requirements and phased tasks. The agent reads it, writes code fro
 it, and may only **propose** changes to it. Nothing enters the harness until a
 human accepts a diff.
 
-Zero native dependencies · one runtime package · 26 tools · 152 tests · MIT
+Zero native dependencies · one runtime package · 27 tools · 163 tests · MIT
 
 ---
 
@@ -163,9 +163,17 @@ claim, a declaration is a contract. And a different way of asking is not a
 different answerer: declining the question or dismissing it leaves the change
 pending, because neither is a decision. Both paths end in the same apply.
 
-The picture is an **output**. There is deliberately no direct manipulation: you
-criticise it in words through `harness_chat`, which turns the critique into
-proposed harness changes. You cannot drag a box into a different specification.
+The picture is an **output** — but you can also draw one. `harness_sketch` opens a
+block editor: place blocks, nest them, say which sit side by side and how wide.
+It emits the same layout tree a sentence in the chat produces, so saving proposes
+a change with a diff and the harness takes it when you approve.
+
+The mouse gets no privileges — that was the whole reason for hesitating, and it
+turned out to be a confusion between the input device and the output format. What
+the editor still cannot do is *design*: there is no colour, no font, no pixel.
+`dir` is row or column and `span` is in twelfths, because a skeleton that could
+say "340px" would stop describing intent and start competing with the
+implementation.
 
 ## Design system
 
@@ -215,6 +223,7 @@ source that can fill the normalized set works.
 | `harness_approve` / `harness_reject` | The human decision — the only thing that mutates the harness |
 | `summarize_session_to_harness` | Structured session summary → per-item proposals |
 | `harness_render` | The visualization (webview HTML or browser) |
+| `harness_sketch` | Place blocks for a screen with the mouse — saving proposes, it does not apply |
 | `harness_verify` | On-demand code ↔ harness divergence report |
 | `harness_configure` | Read or update `config.json` |
 | `harness_checkpoint` | Create, list or restore rollback points |
@@ -326,7 +335,7 @@ Early but real. Honest about where it stands:
 
 - **Works today:** the full loop — assemble, propose, approve/reject, render,
   verify, checkpoint/restore — under both model modes and both render modes,
-  covered by 152 tests. Every tool is exercised over real stdio JSON-RPC, not just
+  covered by 163 tests. Every tool is exercised over real stdio JSON-RPC, not just
   through the internal function, and a test fails the build if a new one slips in
   uncovered.
 - **Dogfooded.** The server has assembled a harness for itself, over the protocol,
@@ -372,7 +381,7 @@ Early but real. Honest about where it stands:
 
 ```bash
 npm run build     # tsc → build/
-npm test          # regenerate prompts, tsc, then vitest — 152 tests:
+npm test          # regenerate prompts, tsc, then vitest — 163 tests:
                   #   lifecycle    assemble → propose → approve → verify → restore
                   #   protocol     every tool over real stdio JSON-RPC
                   #   store        torn write, corrupt file, migration, concurrency

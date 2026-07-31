@@ -20,9 +20,10 @@ import type { Severity } from './security/types.js';
 import { entryHistory, refsWithHistory } from './history/versions.js';
 import { verifyHarness } from './verify.js';
 import { renderHarnessHtml } from './render/html.js';
+import { renderSketchHtml } from './render/sketch.js';
 import { openBrowser, renderServer } from './render/server.js';
 import type { GenerationOutcome } from './model/LlmBridge.js';
-import type { ChangeOp, EntryType, SessionSummary } from './types.js';
+import type { ChangeOp, EntryType, LayoutNode, SessionSummary } from './types.js';
 import { ENTRY_TYPES } from './types.js';
 import fs from 'node:fs';
 
@@ -340,6 +341,22 @@ export const TOOL_DEFS: ToolDef[] = [
     ),
   },
   {
+    name: 'harness_sketch',
+    description:
+      'Open the block editor for a screen: place blocks, nest them, say which sit side by side and how wide. ' +
+      'Structure only — no coordinates, colours or sizes, because the mockup shows where things go, not what ' +
+      'they look like. Saving PROPOSES the layout with a diff; the harness takes it when a human approves. ' +
+      'Needs a browser, so it opens on localhost — the read-only panel keeps working without scripts.',
+    inputSchema: obj(
+      {
+        project_path: PROJECT_PATH,
+        ref: { type: 'string', description: 'Entry to sketch, e.g. "structure/screen-dashboard".' },
+        open_browser: { type: 'boolean', description: 'Open a window. Default true — pass false to just get the URL.' },
+      },
+      ['project_path', 'ref'],
+    ),
+  },
+  {
     name: 'harness_versions',
     description:
       'How one harness entry got to be what it is: every approved change to it, oldest first, numbered 0.1, ' +
@@ -523,6 +540,8 @@ export async function callTool(name: string, args: Args): Promise<unknown> {
       return submitSecurityCheck(args);
     case 'harness_review':
       return review(args);
+    case 'harness_sketch':
+      return sketch(args);
     case 'harness_versions':
       return versions(args);
     case 'harness_history':
@@ -1256,6 +1275,71 @@ function reviewMessage(c: { id: number; op: string; ref: string; rationale: stri
   ]
     .filter((part) => part !== '')
     .join('\n');
+}
+
+/**
+ * Open the block editor and stand ready to receive what it draws.
+ *
+ * The mouse gets no privileges here. A saved sketch takes the same road as a
+ * sentence typed in the chat: a proposal, a diff, a human decision. What differs
+ * is only how the intent was expressed.
+ */
+async function sketch(args: Args) {
+  const svc = open(args);
+  const ref = String(args.ref);
+  const [type, ...rest] = ref.split('/');
+  const key = rest.join('/');
+  const entry = svc.db.getEntry(type as EntryType, key);
+  if (!entry) throw new Error(`No entry "${ref}" in this harness. Use harness_get_spec to see what exists.`);
+
+  // Registered before the page is served, so the first save cannot arrive to a
+  // server that does not yet know what to do with it.
+  renderServer.setSketchHandler(async (submission) => {
+    if (submission.ref !== ref) {
+      return { ok: false, message: `This sketch is for ${ref}, not ${submission.ref}.` };
+    }
+    const layout = submission.layout as LayoutNode | null;
+    if (!layout || typeof layout !== 'object' || typeof (layout as LayoutNode).el !== 'string') {
+      return { ok: false, message: 'That is not a layout tree.' };
+    }
+    const change = svc.proposeEntry(
+      type as EntryType,
+      key,
+      'update',
+      { data: { layout } as never },
+      'Sketched in the block editor.',
+      'sketch',
+    );
+    return {
+      ok: true,
+      message:
+        `Proposed as change #${change.id}. Nothing has changed yet — approve the diff ` +
+        `(harness_review, or harness_approve with this id) and it becomes the layout.`,
+    };
+  });
+
+  const html = renderSketchHtml({
+    projectName: projectName(args.project_path),
+    ref,
+    title: entry.title,
+    layout: (entry.data.layout as LayoutNode | null) ?? null,
+    tokens: svc.db.getDesignTokens(),
+  });
+  const url = await renderServer.serve(html, svc.config.render.port);
+  // A window is a side effect on somebody's screen — opt out has to exist, or a
+  // test run spawns a dozen of them.
+  const opened = args.open_browser === false ? false : openBrowser(url);
+
+  return {
+    status: 'open',
+    ref,
+    url,
+    opened,
+    has_layout: Boolean(entry.data.layout),
+    note:
+      (opened ? 'Opened in the default browser. ' : `Open  when you want it. `) +
+      'Saving proposes the layout with a diff; it enters the harness only when a human approves.',
+  };
 }
 
 /**

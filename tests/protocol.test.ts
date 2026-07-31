@@ -215,6 +215,13 @@ describe('the server over stdio JSON-RPC', () => {
     const survived = await call('harness_get_spec', { project_path: project, type: 'structure' });
     expect(survived.entries.some((e: any) => e.key === 'home')).toBe(true);
 
+    // The sketch editor opens over the wire too, and a save from it is a proposal
+    // like any other — no window, because a test must not open one.
+    const sketch = await call('harness_sketch', { project_path: project, ref: 'structure/home', open_browser: false });
+    expect(sketch.status).toBe('open');
+    expect(sketch.opened).toBe(false);
+    expect(sketch.url).toMatch(/^http:\/\/127\.0\.0\.1:/);
+
     // The approved change is now a version of that entry, readable over the wire.
     const versions = await call('harness_versions', { project_path: project, ref: 'structure/ui' });
     expect(versions.versions).toHaveLength(1);

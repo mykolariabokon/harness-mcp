@@ -70,6 +70,20 @@ export interface LayoutNode {
   el: string; // 'header' | 'sidebar' | 'button' | 'list' | ...
   label?: string;
   children?: LayoutNode[];
+  /**
+   * How this container arranges its children. Absent means the renderer infers
+   * it from the element type, which is a guess — and a guess cannot express
+   * "these two stack" versus "these two sit side by side" without picking a
+   * magic element name for it.
+   */
+  dir?: 'row' | 'col';
+  /**
+   * Share of the row, in twelfths. `span: 4` beside `span: 8` is a third and two
+   * thirds. Not a width: nothing here is measured in pixels, and a layout that
+   * carried them would start competing with the real implementation instead of
+   * describing intent.
+   */
+  span?: number;
 }
 
 /** A design rule applies GLOBALLY to the whole project once approved. */
