@@ -93,7 +93,7 @@ export interface DesignRuleCheck {
   forbidden: boolean;
 }
 
-export type ChangeTarget = 'entry' | 'design_rule';
+export type ChangeTarget = 'entry' | 'design_rule' | 'security_rule';
 export type ChangeOp = 'create' | 'update' | 'delete';
 export type ChangeStatus = 'pending' | 'approved' | 'rejected';
 

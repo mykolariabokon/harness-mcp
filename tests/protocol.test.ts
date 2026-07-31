@@ -40,10 +40,24 @@ interface RpcResponse {
   error?: { message?: string };
 }
 
+/** Everything the server said on stderr, so a crash is not mistaken for slowness. */
+let serverStderr = '';
+
 function send(method: string, params: unknown): Promise<RpcResponse> {
   const id = nextId++;
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${method} timed out`)), 20_000);
+    const timer = setTimeout(() => {
+      // A silent timeout is the least useful failure there is: a server that died
+      // on startup and one that is merely starved look identical from here. Say
+      // which, using what the process itself reported.
+      const alive = server.exitCode === null && !server.killed;
+      reject(
+        new Error(
+          `${method} timed out after 60s. Server ${alive ? 'is still running' : `exited with code ${server.exitCode}`}. ` +
+            `stderr: ${serverStderr.trim() || '(nothing)'}`,
+        ),
+      );
+    }, 60_000);
     pendingRpc.set(id, (msg) => {
       clearTimeout(timer);
       resolve(msg);
@@ -88,6 +102,7 @@ if (newestMtime(path.join(repo, 'src')) > newestMtime(path.join(repo, 'build')))
 beforeAll(async () => {
   project = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-proto-'));
   server = spawn(process.execPath, [entry], { stdio: ['pipe', 'pipe', 'pipe'] });
+  server.stderr.on('data', (chunk: Buffer) => { serverStderr += chunk.toString(); });
 
   let buf = '';
   server.stdout.on('data', (chunk: Buffer) => {
@@ -201,12 +216,40 @@ describe('the server over stdio JSON-RPC', () => {
     expect(survived.entries.some((e: any) => e.key === 'home')).toBe(true);
   });
 
+  it('carries the security layer over the wire, approval and all', async () => {
+    const imported = await call('harness_import_security_rules', { project_path: project });
+    expect(imported.status).toBe('pending_review');
+
+    // Nothing governs before a human says so, even here.
+    const before = await call('harness_security_report', { project_path: project });
+    expect(before.status).toBe('no_rules');
+
+    await call('harness_approve', {
+      project_path: project, change_ids: imported.queued.map((q: any) => q.id), actor: 'human',
+    });
+
+    const after = await call('harness_security_report', { project_path: project });
+    expect(after.coverage.rules).toBeGreaterThan(0);
+    expect(after.unverified.length).toBeGreaterThan(0);
+    // The unverified block never merges into the passed one.
+    expect(after.passed.map((p: any) => p.rule_key))
+      .not.toContain('sec-object-level-authorization');
+
+    const recorded = await call('harness_submit_security_check', {
+      project_path: project, rule_key: 'sec-object-level-authorization',
+      state: 'passed', source: 'protocol test', detail: 'Checked by hand.',
+    });
+    expect(recorded.status).toBe('recorded');
+  });
+
   it('returns the decision record, joined to what was decided', async () => {
     const hist = await call('harness_history', { project_path: project });
 
     expect(hist.approvals.length).toBeGreaterThanOrEqual(2);
-    const approved = hist.approvals.find((a: any) => a.decision === 'approved');
-    const rejected = hist.approvals.find((a: any) => a.decision === 'rejected');
+    // Found by what they decided, not by position: other decisions land in this
+    // record too, and a test that assumes it is first breaks the moment one does.
+    const approved = hist.approvals.find((a: any) => a.ref === 'structure/ui');
+    const rejected = hist.approvals.find((a: any) => a.ref === 'structure/home');
 
     // The point of REQ-013: an approval that cannot name what it approved is noise.
     expect(approved.ref).toBe('structure/ui');

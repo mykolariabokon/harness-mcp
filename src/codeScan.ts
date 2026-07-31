@@ -93,6 +93,18 @@ export function globToRegExp(glob: string): RegExp {
   let src = '';
   for (let i = 0; i < glob.length; i++) {
     const c = glob[i];
+    // Brace alternation — `{ts,js}`. Without it a rule written with the commonest
+    // glob idiom matches nothing at all, and silently governing zero files is the
+    // most dangerous way for a rule to fail.
+    if (c === '{') {
+      const close = glob.indexOf('}', i);
+      if (close > i) {
+        const options = glob.slice(i + 1, close).split(',');
+        src += `(?:${options.map(escapeLiteral).join('|')})`;
+        i = close;
+        continue;
+      }
+    }
     if (c === '*') {
       if (glob[i + 1] === '*') {
         i++;
@@ -152,4 +164,9 @@ function tryJson(raw: string): unknown {
   } catch {
     return raw.slice(0, 2000);
   }
+}
+
+/** Escapes a literal chunk of a glob so regex metacharacters stay literal. */
+function escapeLiteral(s: string): string {
+  return s.replace(/[.+^${}()|[\]\\/*?]/g, (ch) => `\\${ch}`);
 }

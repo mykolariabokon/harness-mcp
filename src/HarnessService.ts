@@ -4,6 +4,8 @@ import { ensureHarnessDir, harnessPaths, type HarnessPaths } from './paths.js';
 import { loadConfig, resolveModelMode, resolveRenderOutput, type HostCapabilities } from './config.js';
 import { LlmBridge } from './model/LlmBridge.js';
 import { objectToText, renderDiff } from './diff.js';
+import type { CatalogueRule } from './security/catalogue.js';
+import type { SecurityRule } from './security/types.js';
 import { writeSpecFiles } from './spec/SpecFiles.js';
 import type {
   ChangeOp,
@@ -165,6 +167,26 @@ export class HarnessService {
     });
   }
 
+  /**
+   * A security rule enters by exactly the same door as everything else. No
+   * separate path, no "but this one is important so it applies immediately" —
+   * that argument is how a gate acquires its first exception.
+   */
+  proposeSecurityRule(rule: CatalogueRule, rationale: string, source = 'catalogue'): PendingChange {
+    const before = this.db.getSecurityRule(rule.key);
+    const diff = renderDiff(objectToText(before ? stripRule(before) : null), objectToText(rule));
+    return this.db.addChange({
+      target: 'security_rule',
+      op: before ? 'update' : 'create',
+      ref: rule.key,
+      before: before ? stripRule(before) : null,
+      after: rule,
+      diff,
+      rationale,
+      source,
+    });
+  }
+
   // --------------------------------------------------------------- decision
 
   approve(changeId: number, actor: string, note: string | null): { change: PendingChange; files: string[] } {
@@ -195,6 +217,12 @@ export class HarnessService {
       } else {
         this.db.upsertEntry(change.after as EntryInput);
       }
+      return;
+    }
+
+    if (change.target === 'security_rule') {
+      if (change.op === 'delete') this.db.retireSecurityRule(change.ref);
+      else this.db.addSecurityRule(change.after as CatalogueRule);
       return;
     }
 
@@ -246,3 +274,9 @@ function stripEntry(e: HarnessEntry) {
 }
 
 export type { ChangeTarget };
+
+/** What a human reviews for a security rule — ids and timestamps are noise. */
+function stripRule(r: SecurityRule) {
+  const { id, status, created_at, ...rest } = r;
+  return rest;
+}

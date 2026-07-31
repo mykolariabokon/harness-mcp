@@ -14,6 +14,9 @@ import { checkDraft, MAX_ATTEMPTS, reworkInstructions, type QualityReport } from
 import { scanCode } from './codeScan.js';
 import { coerceTokens, rulesFromDesignMcp, type ImportedRule } from './design/tokens.js';
 import { fetchDesignSystem } from './design/DesignMcpClient.js';
+import { SECURITY_CATALOGUE } from './security/catalogue.js';
+import { delegatedVerdict, fingerprint, runGrepRule, worstState } from './security/check.js';
+import type { Severity } from './security/types.js';
 import { verifyHarness } from './verify.js';
 import { renderHarnessHtml } from './render/html.js';
 import { openBrowser, renderServer } from './render/server.js';
@@ -269,6 +272,58 @@ export const TOOL_DEFS: ToolDef[] = [
     ),
   },
   {
+    name: 'harness_import_security_rules',
+    description:
+      'Offer the built-in security rules for this stack as proposals. Nothing is applied — each rule queues ' +
+      'with its diff like any other change, because a security layer that switches itself on is the kind ' +
+      'people disable wholesale. Rules already present are skipped.',
+    inputSchema: obj(
+      {
+        project_path: PROJECT_PATH,
+        keys: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Import only these rule keys. Default: all of them.',
+        },
+      },
+      ['project_path'],
+    ),
+  },
+  {
+    name: 'harness_security_report',
+    description:
+      'Run every approved security rule the harness can run, and report the rest honestly. Grep rules are ' +
+      'proven here; rules needing a call graph or a running application come back "unverified" with what ' +
+      'would settle them — never folded in with the passed ones. A report where the unproven looks proven ' +
+      'is worse than no report.',
+    inputSchema: obj(
+      { project_path: PROJECT_PATH, severity: { enum: ['critical', 'high', 'medium'], description: 'Report only at or above this severity.' } },
+      ['project_path'],
+    ),
+  },
+  {
+    name: 'harness_submit_security_check',
+    description:
+      'Hand in a verdict for a rule the harness cannot prove itself — one needing a call graph or a live ' +
+      'application. Any capable tool may produce it: an indexer, browser automation, a script. Recorded with ' +
+      'its source and a fingerprint of the code it judged, so it is reported as stale once that code moves on.',
+    inputSchema: obj(
+      {
+        project_path: PROJECT_PATH,
+        rule_key: { type: 'string' },
+        state: { enum: ['passed', 'failed'], description: 'What was established. Use harness_security_report to see what is unverified.' },
+        source: { type: 'string', description: 'What produced this verdict — tool, script or person. Recorded verbatim.' },
+        detail: { type: 'string', description: 'How it was established, briefly. A verdict without method is a rumour.' },
+        violations: {
+          type: 'array',
+          description: 'Where it fails, when it fails.',
+          items: obj({ file: { type: 'string' }, line: { type: 'integer' }, excerpt: { type: 'string' } }),
+        },
+      },
+      ['project_path', 'rule_key', 'state', 'source'],
+    ),
+  },
+  {
     name: 'harness_review',
     description:
       'Walk the pending changes with the human: each diff is put in front of them through their own client, ' +
@@ -444,6 +499,12 @@ export async function callTool(name: string, args: Args): Promise<unknown> {
       return setDesignTokens(args);
     case 'harness_sync_design_system':
       return syncDesignSystem(args);
+    case 'harness_import_security_rules':
+      return importSecurityRules(args);
+    case 'harness_security_report':
+      return securityReport(args);
+    case 'harness_submit_security_check':
+      return submitSecurityCheck(args);
     case 'harness_review':
       return review(args);
     case 'harness_history':
@@ -941,6 +1002,128 @@ function queueDesignRules(svc: HarnessService, rules: ImportedRule[], source: st
     .map((r) =>
       svc.proposeDesignRule('create', 'new', r, `Imported from ${source}.`, `design-system:${source}`),
     );
+}
+
+/**
+ * Offer the catalogue as proposals. Nothing governs anything until a human says so
+ * — a security layer that installs itself is the kind people turn off entirely.
+ */
+function importSecurityRules(args: Args) {
+  const svc = open(args);
+  const wanted: string[] | null = Array.isArray(args.keys) ? args.keys.map(String) : null;
+  const present = new Set(svc.db.listSecurityRules(true).map((r) => r.key));
+  const alreadyQueued = new Set(
+    svc.db
+      .listPending('pending')
+      .filter((c) => c.target === 'security_rule')
+      .map((c) => c.ref),
+  );
+
+  const queued = SECURITY_CATALOGUE.filter(
+    (r) => (!wanted || wanted.includes(r.key)) && !present.has(r.key) && !alreadyQueued.has(r.key),
+  ).map((r) => svc.proposeSecurityRule(r, `From the built-in catalogue for the JavaScript/TypeScript web stack.`));
+
+  return {
+    status: queued.length ? 'pending_review' : 'nothing_to_import',
+    queued: queued.map((c) => ({ id: c.id, ref: c.ref, diff: c.diff })),
+    skipped: SECURITY_CATALOGUE.filter((r) => present.has(r.key)).map((r) => r.key),
+    pending_total: svc.db.pendingCount(),
+    next: queued.length
+      ? 'Not applied. Each rule waits for a human — review them with harness_review or harness_approve.'
+      : 'Every catalogue rule is already in this harness.',
+  };
+}
+
+/**
+ * The security report.
+ *
+ * Grep rules are proven here. The rest are reported as unverified with what would
+ * settle them, and they are kept in their own block: nothing failing and nothing
+ * being checked look identical from a summary line, and only one of them is safe.
+ */
+function securityReport(args: Args) {
+  const svc = open(args);
+  const floor = (args.severity ?? 'medium') as Severity;
+  const rank: Record<Severity, number> = { critical: 3, high: 2, medium: 1 };
+  const rules = svc.db.listSecurityRules().filter((r) => rank[r.severity] >= rank[floor]);
+
+  if (!rules.length) {
+    return {
+      status: 'no_rules',
+      note:
+        'No approved security rules at this severity. Offer the built-in catalogue with ' +
+        'harness_import_security_rules — approved rules govern, imported ones do not.',
+    };
+  }
+
+  const verdicts = rules.map((rule) =>
+    rule.check_kind === 'grep'
+      ? runGrepRule(rule, svc.paths.projectRoot)
+      : delegatedVerdict(rule, svc.paths.projectRoot, svc.db.getVerdict(rule.key)),
+  );
+
+  const failed = verdicts.filter((v) => v.state === 'failed');
+  const unverified = verdicts.filter((v) => v.state === 'unverified');
+  const criticalFailures = failed.filter((v) => v.severity === 'critical');
+
+  return {
+    // Three separate blocks, never summed into one number: a count that mixes
+    // "checked and clean" with "never checked" is the failure this layer exists
+    // to avoid.
+    state: worstState(verdicts),
+    // Passed verdicts keep their provenance too. A delegated "passed" whose
+    // source and staleness were stripped is the most dangerous entry in the
+    // report: it looks settled, and nobody can see it was settled last week
+    // against code that has since changed.
+    passed: verdicts.filter((v) => v.state === 'passed'),
+    failed,
+    unverified,
+    critical_failures: criticalFailures.length,
+    coverage: {
+      rules: rules.length,
+      proven_here: verdicts.filter((v) => v.check_kind === 'grep').length,
+      needs_outside_evidence: verdicts.filter((v) => v.check_kind !== 'grep').length,
+    },
+    note: criticalFailures.length
+      ? `${criticalFailures.length} critical rule(s) are violated. Do not report this work as done until they are fixed or the rule is retired through an approved change.`
+      : unverified.length
+        ? `${unverified.length} rule(s) were not checked. They are not passing — they are unexamined, and each says what would settle it.`
+        : 'Every approved rule that can be proven here passed.',
+  };
+}
+
+/** Accept a verdict from whoever could produce it (`inv-capability-not-tool`). */
+function submitSecurityCheck(args: Args) {
+  const svc = open(args);
+  const rule = svc.db.getSecurityRule(String(args.rule_key));
+  if (!rule) throw new Error(`No security rule "${args.rule_key}" in this harness.`);
+  if (rule.check_kind === 'grep') {
+    throw new Error(
+      `"${rule.key}" is a grep rule — the harness proves it itself, and accepting an outside verdict would ` +
+        `let a claim override an observation. Run harness_security_report.`,
+    );
+  }
+
+  const stored = svc.db.addVerdict({
+    rule_key: rule.key,
+    state: args.state === 'failed' ? 'failed' : 'passed',
+    source: String(args.source),
+    detail: String(args.detail ?? ''),
+    violations: Array.isArray(args.violations) ? args.violations : [],
+    // Pinned to the code as it is now, so the verdict can be told later that it
+    // no longer covers what is on disk.
+    fingerprint: fingerprint(svc.paths.projectRoot, rule),
+  });
+
+  return {
+    status: 'recorded',
+    rule: rule.key,
+    state: stored.state,
+    source: stored.source,
+    note:
+      'Recorded against the current state of the files this rule governs. It will be reported as stale once ' +
+      'they change — a verdict proven against different code is not evidence about this one.',
+  };
 }
 
 /**

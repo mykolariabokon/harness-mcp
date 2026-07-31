@@ -7,13 +7,14 @@ import type {
   SessionSummary,
 } from '../types.js';
 import type { DesignTokens } from '../design/tokens.js';
+import type { SecurityRule, StoredVerdict } from '../security/types.js';
 
 /**
  * Schema versioning is in place from day one: a future release must be able to
  * open a `/harness` folder written by an older one. Never edit a shipped
  * migration — append a new one and bump SCHEMA_VERSION.
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export interface StoredGeneration {
   id: number;
@@ -54,6 +55,9 @@ export interface HarnessDoc {
   sessions: StoredSession[];
   generation_requests: StoredGeneration[];
   design_tokens: StoredTokens[];
+  security_rules: SecurityRule[];
+  /** Verdicts handed in for the checks the harness cannot run itself. */
+  security_verdicts: StoredVerdict[];
 }
 
 interface Migration {
@@ -81,6 +85,16 @@ const MIGRATIONS: Migration[] = [
     to: 2,
     up: (doc) => {
       doc.design_tokens = [];
+    },
+  },
+  {
+    // v3 — security rules and the verdicts handed in for the checks the harness
+    // cannot run itself. Separate from design_rules: same machinery, different
+    // stakes, and a security rule must not be switchable off as casually.
+    to: 3,
+    up: (doc) => {
+      doc.security_rules = [];
+      doc.security_verdicts = [];
     },
   },
 ];
@@ -117,5 +131,7 @@ function normalize(doc: Partial<HarnessDoc>): HarnessDoc {
     sessions: doc.sessions ?? [],
     generation_requests: doc.generation_requests ?? [],
     design_tokens: doc.design_tokens ?? [],
+    security_rules: doc.security_rules ?? [],
+    security_verdicts: doc.security_verdicts ?? [],
   };
 }

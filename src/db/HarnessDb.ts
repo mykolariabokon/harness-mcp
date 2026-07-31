@@ -15,6 +15,7 @@ import type {
   SessionSummary,
 } from '../types.js';
 import type { DesignTokens } from '../design/tokens.js';
+import type { SecurityRule, StoredVerdict } from '../security/types.js';
 
 const now = () => new Date().toISOString();
 
@@ -166,6 +167,66 @@ export class HarnessDb {
     this.store.mutate((doc) => {
       const found = doc.design_rules.find((r) => r.id === id);
       if (found) found.status = 'retired';
+    });
+  }
+
+  // -------------------------------------------------------- security rules
+
+  listSecurityRules(includeRetired = false): SecurityRule[] {
+    return this.store
+      .read()
+      .security_rules.filter((r) => includeRetired || r.status === 'active')
+      .sort((a, b) => a.id - b.id)
+      .map(copy);
+  }
+
+  getSecurityRule(key: string): SecurityRule | null {
+    const found = this.store.read().security_rules.find((r) => r.key === key);
+    return found ? copy(found) : null;
+  }
+
+  addSecurityRule(
+    rule: Omit<SecurityRule, 'id' | 'status' | 'created_at' | 'exceptions'> & { exceptions?: SecurityRule['exceptions'] },
+  ): SecurityRule {
+    return this.store.mutate((doc) => {
+      // A rule arriving without exceptions excuses nobody — that is the safe
+      // default, and the only one a fresh rule should ever get.
+      const withDefaults = { ...rule, exceptions: rule.exceptions ?? [] };
+      const existing = doc.security_rules.find((r) => r.key === rule.key);
+      if (existing) {
+        Object.assign(existing, withDefaults, { status: 'active' as const });
+        return copy(existing);
+      }
+      const created: SecurityRule = {
+        ...withDefaults,
+        id: nextId(doc, 'security_rules'),
+        status: 'active',
+        created_at: now(),
+      };
+      doc.security_rules.push(created);
+      return copy(created);
+    });
+  }
+
+  retireSecurityRule(key: string): void {
+    this.store.mutate((doc) => {
+      const found = doc.security_rules.find((r) => r.key === key);
+      if (found) found.status = 'retired';
+    });
+  }
+
+  /** The latest verdict handed in for a rule, or nothing if none ever was. */
+  getVerdict(ruleKey: string): StoredVerdict | undefined {
+    const all = this.store.read().security_verdicts.filter((v) => v.rule_key === ruleKey);
+    return all.length ? copy(all.reduce((a, b) => (b.id > a.id ? b : a))) : undefined;
+  }
+
+  /** Verdicts accumulate rather than overwrite — the history is the audit trail. */
+  addVerdict(v: Omit<StoredVerdict, 'id' | 'created_at'>): StoredVerdict {
+    return this.store.mutate((doc) => {
+      const created: StoredVerdict = { ...v, id: nextId(doc, 'security_verdicts'), created_at: now() };
+      doc.security_verdicts.push(created);
+      return copy(created);
     });
   }
 

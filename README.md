@@ -8,7 +8,7 @@ design rules, requirements and phased tasks. The agent reads it, writes code fro
 it, and may only **propose** changes to it. Nothing enters the harness until a
 human accepts a diff.
 
-Zero native dependencies · one runtime package · 22 tools · 122 tests · MIT
+Zero native dependencies · one runtime package · 25 tools · 145 tests · MIT
 
 ---
 
@@ -203,6 +203,9 @@ source that can fill the normalized set works.
 | `harness_propose_structure` | Generate or extend the project structure |
 | `harness_propose_change` | One precise proposal, no model involved |
 | `harness_add_design_rule` | A rule that applies **globally** (optionally with a machine check) |
+| `harness_import_security_rules` | Offer the built-in security catalogue as proposals |
+| `harness_security_report` | Run what can be proven here; report the rest as unverified, never as passed |
+| `harness_submit_security_check` | Hand in a verdict for what needs a graph or a running app |
 | `harness_set_design_tokens` | Design tokens handed in by the host |
 | `harness_sync_design_system` | The harness pulls tokens and rules itself |
 | `harness_list_pending` | Pending changes + the unapproved-count badge |
@@ -226,6 +229,39 @@ source that can fill the normalized set works.
 Each decision and each open question becomes its **own** pending item, so a human
 approves the session point by point instead of accepting a blob of text. That is
 the difference between "the agent wrote something down" and a specification.
+
+## Security rules
+
+A second rule layer beside the design rules, organised around one idea: **a rule
+with no way to check it is a wish wearing a rule's clothes.** So a rule is
+classified by how it is proven, not by what it is about.
+
+| `check_kind` | What it needs | Who proves it |
+|---|---|---|
+| `grep` | a pattern in the source | the harness, always |
+| `structural` | a call graph — who reaches what | whoever has one |
+| `runtime` | a running app and a way to drive it | whoever can drive it |
+
+The last two name a **capability, never a product**. One person has a semantic
+indexer, another browser automation, a third a shell script; the rule is identical
+for all three and only the producer of the verdict differs. Verdicts come back
+through `harness_submit_security_check` with their source and a fingerprint of the
+code they judged — so once that code moves on, the verdict is reported as stale
+rather than trusted forever.
+
+Two things this layer refuses to do:
+
+- **`unverified` never becomes `passed`.** Nothing failing and nothing being
+  checked look identical in a summary line, and only one of them is safe. They stay
+  in separate blocks, and an unchecked rule says what would settle it.
+- **It does not switch itself on.** `harness_import_security_rules` offers the
+  built-in catalogue as proposals; each one waits for a human like any other change.
+  A security layer that installs itself is the kind that gets disabled wholesale.
+
+Five rules ship, not fifty — three provable here, two needing outside evidence.
+Every one has a test that it catches its violation *and* a test that it stays quiet
+on correct code. The second matters more: the second false alarm is when a rule
+starts being ignored, and the third is when the whole layer is.
 
 ## Prompts
 
@@ -289,7 +325,7 @@ Early but real. Honest about where it stands:
 
 - **Works today:** the full loop — assemble, propose, approve/reject, render,
   verify, checkpoint/restore — under both model modes and both render modes,
-  covered by 122 tests. Every tool is exercised over real stdio JSON-RPC, not just
+  covered by 145 tests. Every tool is exercised over real stdio JSON-RPC, not just
   through the internal function, and a test fails the build if a new one slips in
   uncovered.
 - **Dogfooded.** The server has assembled a harness for itself, over the protocol,
@@ -318,7 +354,7 @@ Early but real. Honest about where it stands:
 
 ```bash
 npm run build     # tsc → build/
-npm test          # regenerate prompts, tsc, then vitest — 122 tests:
+npm test          # regenerate prompts, tsc, then vitest — 145 tests:
                   #   lifecycle    assemble → propose → approve → verify → restore
                   #   protocol     every tool over real stdio JSON-RPC
                   #   store        torn write, corrupt file, migration, concurrency
@@ -326,6 +362,7 @@ npm test          # regenerate prompts, tsc, then vitest — 122 tests:
                   #   universal    provider request shape, parsing, retry, refusal
                   #   prompts      composition, conditional sections, snapshots
                   #   render       per-type layout, no-JS switching, both token paths
+                  #   security     each rule catches its violation AND stays quiet on clean code
 ```
 
 `npm test` compiles first on purpose: the protocol suite drives the built server,
