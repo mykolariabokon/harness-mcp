@@ -349,6 +349,23 @@ Early but real. Honest about where it stands:
 - **`harness_verify` is structural, not semantic.** It checks declared paths,
   unaccounted top-level areas, regex-checkable design rules and steps with no
   verification command. It does not read your code's meaning.
+- **Two of the five security rules will sit `unverified` for most people.** They
+  need a call graph or a running application, and the harness has neither. That is
+  reported honestly rather than passed over — but be clear about what it means: the
+  two most valuable rules in the set, object-level authorization and server-side
+  validation, are the ones nothing checks automatically. Somebody has to run them
+  and hand the verdict in.
+- **The grep rules catch patterns, not intent.** `sec-sql-concat` reads a template
+  literal that looks like SQL; it cannot see a query assembled across three
+  functions. Passing means the obvious form of the mistake is absent, not that the
+  code is safe.
+- **`critical` does not block anything here.** The report counts critical failures
+  and says not to call the work done, but this server has no notion of a task to
+  stop — that belongs to whatever orchestrates it. Wiring the block is the host's
+  job; pretending to do it from here would be worse than saying so.
+- **No dependency scanning, deliberately.** A CVE list baked into a product rots
+  from the day it ships. That belongs to a live source at build time, not to a
+  specification.
 
 ## Development
 
@@ -403,14 +420,21 @@ Saying so plainly matters more than the badge. What it means in practice:
   surfaced four defects the whole suite had missed, including an approval table
   written to on every decision and read by nothing. Writing tests is not the same
   as using the thing.
+- **The worst bugs here were all the same bug.** Something unproven presenting as
+  proven: a decision losing its `[assumption]` marker, a stale-build guard
+  reporting skips that read as green, a security glob silently matching no files at
+  all, a delegated verdict shown as passed with its age and origin stripped. None
+  of them broke anything visibly. Every one of them would have produced confidence
+  that nothing had earned — which is the failure this whole project is aimed at,
+  turning up inside the project itself.
 - **The guards need guarding too.** A check added to stop the suite passing against
   a stale build turned out to report its eight tests as *skipped* — and a skip
   reads as green in the summary line. A guard against false greens that quietly
   produced one. It now fails collection instead, verified by breaking the build on
   purpose rather than by reasoning about it.
 - **Read the code before you trust it.** That advice holds for any dependency; it
-  holds here too. It is a small codebase — about 4,600 lines of TypeScript, 1,600
-  of tests, and 27 markdown fragments the prompts are composed from — and the
+  holds here too. It is a small codebase — about 5,500 lines of TypeScript, 2,200
+  of tests, and 28 markdown fragments the prompts are composed from — and the
   comments explain *why*, not *what*, so it is meant to be read.
 
 There is a pleasing symmetry in a tool that exists to keep AI agents honest about
