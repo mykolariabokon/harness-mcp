@@ -8,7 +8,7 @@ design rules, requirements and phased tasks. The agent reads it, writes code fro
 it, and may only **propose** changes to it. Nothing enters the harness until a
 human accepts a diff.
 
-Zero native dependencies · one runtime package · 25 tools · 145 tests · MIT
+Zero native dependencies · one runtime package · 26 tools · 152 tests · MIT
 
 ---
 
@@ -211,6 +211,7 @@ source that can fill the normalized set works.
 | `harness_list_pending` | Pending changes + the unapproved-count badge |
 | `harness_review` | Walk the queue with the human through their own client, applying each answer |
 | `harness_history` | The decision record: every approval joined to what it decided |
+| `harness_versions` | How one entry became what it is — 0.1, 0.2, 0.3, with the layout at each step |
 | `harness_approve` / `harness_reject` | The human decision — the only thing that mutates the harness |
 | `summarize_session_to_harness` | Structured session summary → per-item proposals |
 | `harness_render` | The visualization (webview HTML or browser) |
@@ -325,7 +326,7 @@ Early but real. Honest about where it stands:
 
 - **Works today:** the full loop — assemble, propose, approve/reject, render,
   verify, checkpoint/restore — under both model modes and both render modes,
-  covered by 145 tests. Every tool is exercised over real stdio JSON-RPC, not just
+  covered by 152 tests. Every tool is exercised over real stdio JSON-RPC, not just
   through the internal function, and a test fails the build if a new one slips in
   uncovered.
 - **Dogfooded.** The server has assembled a harness for itself, over the protocol,
@@ -371,7 +372,7 @@ Early but real. Honest about where it stands:
 
 ```bash
 npm run build     # tsc → build/
-npm test          # regenerate prompts, tsc, then vitest — 145 tests:
+npm test          # regenerate prompts, tsc, then vitest — 152 tests:
                   #   lifecycle    assemble → propose → approve → verify → restore
                   #   protocol     every tool over real stdio JSON-RPC
                   #   store        torn write, corrupt file, migration, concurrency

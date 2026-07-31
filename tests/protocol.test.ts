@@ -214,6 +214,14 @@ describe('the server over stdio JSON-RPC', () => {
     });
     const survived = await call('harness_get_spec', { project_path: project, type: 'structure' });
     expect(survived.entries.some((e: any) => e.key === 'home')).toBe(true);
+
+    // The approved change is now a version of that entry, readable over the wire.
+    const versions = await call('harness_versions', { project_path: project, ref: 'structure/ui' });
+    expect(versions.versions).toHaveLength(1);
+    expect(versions.versions[0].version).toBe('0.1');
+    // The rejected one left no version behind.
+    const untouched = await call('harness_versions', { project_path: project, ref: 'structure/home' });
+    expect(untouched.versions).toEqual([]);
   });
 
   it('carries the security layer over the wire, approval and all', async () => {

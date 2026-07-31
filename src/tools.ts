@@ -17,6 +17,7 @@ import { fetchDesignSystem } from './design/DesignMcpClient.js';
 import { SECURITY_CATALOGUE } from './security/catalogue.js';
 import { delegatedVerdict, fingerprint, runGrepRule, worstState } from './security/check.js';
 import type { Severity } from './security/types.js';
+import { entryHistory, refsWithHistory } from './history/versions.js';
 import { verifyHarness } from './verify.js';
 import { renderHarnessHtml } from './render/html.js';
 import { openBrowser, renderServer } from './render/server.js';
@@ -339,6 +340,21 @@ export const TOOL_DEFS: ToolDef[] = [
     ),
   },
   {
+    name: 'harness_versions',
+    description:
+      'How one harness entry got to be what it is: every approved change to it, oldest first, numbered 0.1, ' +
+      '0.2, 0.3 — each with the diff the human saw, who decided, when and why. For a screen this is the ' +
+      'design history: what the layout was at every step. Nothing extra is stored for it; it is read back ' +
+      'out of the decisions already recorded.',
+    inputSchema: obj(
+      {
+        project_path: PROJECT_PATH,
+        ref: { type: 'string', description: 'Entry reference, e.g. "structure/screen-dashboard". Omit to list what has a history.' },
+      },
+      ['project_path'],
+    ),
+  },
+  {
     name: 'harness_history',
     description:
       'The decision record: every approval and rejection with the change it decided, who decided, when, and any note — ' +
@@ -507,6 +523,8 @@ export async function callTool(name: string, args: Args): Promise<unknown> {
       return submitSecurityCheck(args);
     case 'harness_review':
       return review(args);
+    case 'harness_versions':
+      return versions(args);
     case 'harness_history':
       return history(args);
     case 'harness_list_pending':
@@ -1238,6 +1256,24 @@ function reviewMessage(c: { id: number; op: string; ref: string; rationale: stri
   ]
     .filter((part) => part !== '')
     .join('\n');
+}
+
+/**
+ * How one entry became what it is — read back from decisions, never stored twice.
+ */
+function versions(args: Args) {
+  const svc = open(args);
+  if (!args.ref) {
+    const available = refsWithHistory(svc.db);
+    return {
+      status: 'index',
+      entries: available,
+      note: available.length
+        ? 'Ask again with one of these refs to see its versions.'
+        : 'Nothing has been changed since assembly, so nothing has a history yet.',
+    };
+  }
+  return entryHistory(svc.db, String(args.ref));
 }
 
 /**

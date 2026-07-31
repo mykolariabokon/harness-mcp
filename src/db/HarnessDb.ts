@@ -341,7 +341,14 @@ export class HarnessDb {
       const snap = JSON.parse(found.snapshot) as Snapshot;
       doc.entries = snap.entries;
       doc.design_rules = snap.rules;
-      doc.pending_changes = [];
+      // Pending proposals are dropped: they were written against a state that no
+      // longer exists, and applying them now would mean something nobody reviewed.
+      //
+      // Decided ones are KEPT. They are the record of what was approved and when,
+      // and each carries the before/after a rollback cannot undo having happened.
+      // Deleting them used to leave the approvals pointing at changes that were
+      // gone — a history that says a decision was made about nothing.
+      doc.pending_changes = doc.pending_changes.filter((c) => c.status !== 'pending');
     });
   }
 
